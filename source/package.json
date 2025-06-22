@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "auth_signin": "source ../dev/.env.dev.common; source ../dev/.env.dev.auth_signin; NODE_ENV=dev nodemon auth_signin.mjs"
+    "keys_get": "source ../dev/.env.dev.common; source ../dev/.env.dev.tests; NODE_ENV=dev nodemon keys_get.mjs"
   },
   "author": "",
   "license": "ISC",

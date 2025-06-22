@@ -1,7 +1,7 @@
 "use strict";
 
 /// Import interface
-import Platforms from '../interface.mjs';
+import Platforms from './interface.mjs';
 
 /// Module-scoped variables
 let logger
@@ -26,12 +26,20 @@ export default class AWSPlatform extends Platforms {
         /// Import authenticator mode
         switch (process.env['AUTH_TYPE'].toLowerCase()) {
 
-            /// Load google's OAuth2 authenticator
-            case "oauth2_google" : this.Authenticator = (await import("./cognito/oauth2_google.mjs")).default; break;
+            /// Load firebase authenticator
+            case "firebase" : this.Authenticator = (await import("./aws/authentication/firebase.mjs")).default; break;
 
             default: throw new Error("Unsupported authentication type.");
         }
+
         /// Import storage libraries
+        switch (process.env['STORAGE_TYPE'].toLowerCase()) {
+
+            /// Load aws s3 bucket storage
+            case "s3" : this.Storage = (await import("./aws/storages/s3.mjs")).default; break;
+
+            default: throw new Error("Unsupported storage type.")
+        }
 
     }
 }

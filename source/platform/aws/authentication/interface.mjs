@@ -7,6 +7,7 @@ export default class Authenticators {
         this.#enforce("verify", "function");
         this.#enforce("register", "function");
         this.#enforce("delete", "function");
+        this.#enforce("info", "function");
     }
 
     #enforce(method, type){ if(typeof this[method] != type) { throw new Error(`${ method } ${ type } must be implemented.`); } }
