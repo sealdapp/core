@@ -2,13 +2,15 @@
 "use strict";
 
 /// Module-scoped variables
+let schema;
 let logger;
 let validate
 
 export default class Platform {
 
-    constructor(__logger, __validate) {
+    constructor(__schema, __logger, __validate) {
         /// Set module variables
+        schema = __schema;
         logger = __logger;
         validate = __validate;
 
@@ -16,23 +18,26 @@ export default class Platform {
         this.platform;
 
         /// Ensure platform is defined
-        if(!validate.property.isExistsKey(process.env, "PLATFORM").valid) throw new Error("PLATFORM not configured.");
+        if(validate.Property.isExistsKey(process.env, "PLATFORM").result == false) throw new Error("PLATFORM not configured.");
 
         /// Ensure authentication type is defined
-        if(!validate.property.isExistsKey(process.env, "AUTH_TYPE").valid) throw new Error("AUTH_TYPE not configured.");
+        if(validate.Property.isExistsKey(process.env, "AUTH_TYPE").result == false) throw new Error("AUTH_TYPE not configured.");
 
         /// Ensure authentication type is defined
-        if(!validate.property.isExistsKey(process.env, "STORAGE_TYPE").valid) throw new Error("STORAGE_TYPE not configured.");
+        if(validate.Property.isExistsKey(process.env, "STORAGE_TYPE").result == false) throw new Error("STORAGE_TYPE not configured.");
+
+        /// Ensure secrets type is defined
+        if(validate.Property.isExistsKey(process.env, "SECRET_TYPE").result == false) throw new Error("SECRET_TYPE not configured.");
 
         logger.debug("Platform loader instantiated.")
     }
 
     async load() {
         
-        logger.debug(`Loading platform libraries for [${ process.env["PLATFORM"] }]...`);
+        logger.debug(`Loading platform libraries for [${ process.env.PLATFORM }]...`);
 
         /// Import platform specific plugins
-        switch (process.env["PLATFORM"].toLowerCase()) {
+        switch (process.env.PLATFORM.toLowerCase()) {
 
             /// Load aws platform libraries
             case "aws" : this.platform = (await import("./aws.mjs")).default; break;
@@ -42,11 +47,13 @@ export default class Platform {
 
         logger.debug("Instantiating loaded platforms...")
 
-        this.platform = new this.platform(logger);
+        this.platform = new this.platform(schema, logger);
 
         logger.debug("Invoking initialize platform.");
 
-        await this.platform.init();
+        let init = await this.platform.init();
+
+        if(init.success == false) throw new Error(`Failed to load platform. ${ init.error.stack }`)
         
         return this.platform;
     }

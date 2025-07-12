@@ -4,16 +4,18 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "keys_get": "source ../dev/.env.dev.common; source ../dev/.env.dev.tests; NODE_ENV=dev nodemon keys_get.mjs"
+    "auth_signin": "source ../dev/.env.creds.aws; source ../dev/.env.common; source ../dev/.env.tests; NODE_ENV=dev nodemon auth_signin.mjs"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.637.0",
+    "@aws-sdk/client-ssm": "^3.839.0",
     "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "google-auth-library": "^10.1.0",
     "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^3.3.2",
     "winston": "^3.14.2"
   }
 }

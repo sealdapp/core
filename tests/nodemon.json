@@ -1,0 +1,5 @@
+{
+  "watch": ["test"],  
+  "ext": "js,json",         
+  "exec": "echo '' > ../logs/app.log; mocha --require ./test/00_setup.js"      
+}
