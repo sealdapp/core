@@ -75,7 +75,7 @@ export const handler = async(event) => {
         
         /// Ensure event have request body
         if(validate.Property.isExistsKey(event, "body").result == false) return new schema.Response.Auth.Signin({
-            code : 400,
+            statusCode : 400,
             message : "Bad request"
         })
 
@@ -87,8 +87,7 @@ export const handler = async(event) => {
         
         /// Handle invalid authentications
         if(signed_in.authenticated == false) return new schema.Response.Auth.Signin({
-            success : true,
-            code : 401,
+            statusCode : 401,
             body : {
                 retry: signed_in.retry,
                 message : "Failed to authenticate user."
@@ -97,26 +96,23 @@ export const handler = async(event) => {
 
         /// Handle unauthorized access
         if(signed_in.authorized == false) return new schema.Response.Auth.Signin({
-            success : true,
-            code : 403,
+            statusCode : 403,
             body : {
                 retry: signed_in.retry,
                 message : "You are not authorized."
             }
         })
 
-        /// Set http only cookie here only if user is authenticated and authorized
-        if(signed_in.authenticated && signed_in.authorized) {
-            logger.debug(`Setting JWT cookie to user's session`);
-        }
-
         /// Return successful signins
         return new schema.Response.Auth.Signin({ 
-            success : true,
-            code : 200,
+            statusCode : 200,
+            headers : {
+                'Set-Cookie': `sessionToken=${ signed_in.token }; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax`,
+                'Content-Type': 'text/plain'
+            },
             body : {
                 retry: signed_in.retry,
-                message : signed_in.message
+                message : "User successfully authenticated!",
             }
         });
     }
@@ -126,8 +122,10 @@ export const handler = async(event) => {
         logger.error(`Something went wrong. ${ e.stack }`)
         
         return new schema.Response.Auth.Signin({ 
-            code : 500,
-            message : e.message 
+            statusCode : 500,
+            body : {
+                message : e.message 
+            }
         });
     }
 }

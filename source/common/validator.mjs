@@ -25,14 +25,10 @@ export default class Validator {
 
                 if(!property.hasOwnProperty(key)) throw new Error(`Key [${ key }] doesn't exists.`)
 
-                /// Success scenarios
-                if(property[key]) return new schema.Validation({ 
+                return new schema.Validation({ 
                     success : true, 
                     result : true 
                 });
-
-                /// Unknown scenarios
-                else throw new Error(`Unknown error during validation of property.`);
             }
             catch(e) { return Helper.catcher(e); }
         }

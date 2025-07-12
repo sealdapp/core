@@ -79,8 +79,6 @@ export default class Storage extends Storages {
 
             let response = await this.#client.send(command);
 
-            console.log(response)
-
             return new schema.Storage.HeadObject({
                 success : true,
                 exists : true

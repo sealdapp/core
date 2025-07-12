@@ -173,7 +173,18 @@ export default class Authenticator extends Authenticators {
             if(validate.Property.isExistsKey(decoded.payload, "email_verified").result == false) throw new Error("Email verified is not known from token payload.");
 
             /// Ensure email address was verified
-            if(validate.Type.isBoolean(decoded.payload.email_verified) == false) throw new Error("Email verified is not valid.");
+            if(validate.Type.isBoolean(decoded.payload.email_verified).result == false) throw new Error("Email verified is not valid.");
+
+            /// Ensure email_verified is set to true only when not in dev
+            if(decoded.payload.email_verified == false) {
+                
+                /// Skip email verification check if running on dev environment
+                if(process.env.NODE_ENV === "dev") logger.debug(`Detected dev environment. Skipping email verification check`);
+                    
+                /// Otherwise, throw error due to email is not verified
+                else throw new Error("Email is not verified.");
+
+            }
 
             logger.debug(`Verifying signin attempt for user [${ decoded.payload.email }]`)
 

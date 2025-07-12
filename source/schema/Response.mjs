@@ -6,12 +6,11 @@ export default class Response {
 
     static Base = class {
 
-        constructor({ success = false, code = 500, body = {}, message = "" }){
+        constructor({ statusCode = 500, headers = {}, body = {} }){
 
-            this.success = Helper.validate(success, "boolean");
-            this.code = Helper.validate(code, "number");
-            this.message = Helper.validate(message, "string");
-            this.body = Helper.validate(body, "object");
+            this.statusCode = Helper.validate(statusCode, "number");
+            this.headers = Helper.validate(headers, "object");
+            this.body = JSON.stringify(Helper.validate(body, "object"));
         }
     }
 
