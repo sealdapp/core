@@ -32,6 +32,25 @@ export default class Validator {
             }
             catch(e) { return Helper.catcher(e); }
         }
+
+        static async isExistsKeys(property, keys) {
+
+            try {
+                /// Failure scenarios
+                if(!property) throw new Error("Invalid property");
+
+                for(const key of keys) {
+
+                    if(!property.hasOwnProperty(key)) throw new Error(`Key [${ key }] doesn't exists.`)
+
+                }
+                return new schema.Validation({ 
+                    success : true, 
+                    result : true 
+                });
+            }
+            catch(e) { return Helper.catcher(e); }
+        }
     }
 
     Type = class {
@@ -58,6 +77,22 @@ export default class Validator {
 
                 /// Failure scenarios
                 if(kind != "boolean") throw new Error("Data is not of boolean type.");
+
+                /// Success scenarios
+                else return new schema.Validation({ 
+                    success: true, 
+                    result : true 
+                });
+            }
+            catch(e) { return Helper.catcher(e); }
+        }
+
+        static isArray(value) {
+            try {
+                let kind = Helper.getKind(value);
+
+                /// Failure scenarios
+                if(kind != "array") throw new Error("Data is not of array type.");
 
                 /// Success scenarios
                 else return new schema.Validation({ 

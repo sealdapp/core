@@ -6,16 +6,17 @@ import path from 'path';
 /// Import application common libraries
 import Schema from "./schema/Schema.mjs";
 import Logger from "./common/logger.mjs";
-import Fetch from "./common/fetch.mjs";
 import Validator from "./common/validator.mjs";
+import Utilities from "./common/utils.mjs";
 import Crypto from "./common/crypto.mjs";
+import Session from "./common/session.mjs";
 import Platform from "./platform/platform.mjs";
 
 /// Initialize libraries
 const logger = new Logger(path); 
 const schema = new Schema();
-const fetch = new Fetch(schema, logger);
 const validate = new Validator(schema, logger);
+const utils = new Utilities(schema, logger, validate);
 const crypto = new Crypto(schema, logger, validate);
 const platform = new Platform(schema, logger, validate);
 
@@ -23,6 +24,10 @@ const platform = new Platform(schema, logger, validate);
 let auth;
 let secret;
 let storage = {};
+let session;
+
+/// Storage path prefix
+const USERS_PATH_PREFIX = "users";
 
 await (async function init(){
 
@@ -33,7 +38,7 @@ await (async function init(){
 
     /// Ensure jwt private key to be used is defined
     if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result == false) throw new Error("SECRET_JWT_PRIVATE not configured");
-
+    
     /// Load all the plugins for the platform
     let plugins = await platform.load();
 
@@ -41,30 +46,30 @@ await (async function init(){
     secret = new plugins.Secret(schema, logger, validate);
 
     /// Initialize secrets plugin
-    let init_secret = await secret.init()
-
-    /// Ensure secret initialization is successful
-    if(init_secret.success == false) throw init_secret.error;
+    utils.Initializer.initialize(await secret.init());
     
     /// Storage library
     storage.private = new plugins.Storage(schema, logger, validate);
     
     /// Initialize key storage plugin instance
-    let init_storage_private = await storage.private.init(process.env.STORAGE_BUCKET_PRIVATE);
-
-    /// Ensure key storage plugin instance was initialized successfully
-    if(init_storage_private.success == false) throw init_storage_private.error;
+    utils.Initializer.initialize(await storage.private.init(process.env.STORAGE_BUCKET_PRIVATE));
 
     /// Authentication library
-    auth = new plugins.Authenticator(schema, logger, validate, fetch, crypto, secret, storage.private);
+    auth = new plugins.Authenticator(schema, logger, validate);
 
     /// Initialize authenticator plugin
-    let init_auth = await auth.init()
+    utils.Initializer.initialize(await auth.init());
 
-    /// Ensure authenticator initialization is successful
-    if(init_auth.success == false) throw init_auth.error;
+    logger.info("Plugins successfullly loaded.");
+
+    /// Session manager
+    session = new Session(schema, logger, validate, crypto, secret);
+
+    /// Initialize session manager
+    utils.Initializer.initialize(await session.init());
 
     logger.info(`Application successfully initialized.`)
+
 })()
 
 export const handler = async(event) => {
@@ -94,27 +99,86 @@ export const handler = async(event) => {
             }
         })
 
-        /// Handle unauthorized access
-        if(signed_in.authorized == false) return new schema.Response.Auth.Signin({
-            statusCode : 403,
-            body : {
-                retry: signed_in.retry,
-                message : "You are not authorized."
-            }
-        })
 
-        /// Return successful signins
-        return new schema.Response.Auth.Signin({ 
-            statusCode : 200,
-            headers : {
-                'Set-Cookie': `sessionToken=${ signed_in.token }; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax`,
-                'Content-Type': 'text/plain'
-            },
-            body : {
-                retry: signed_in.retry,
-                message : "User successfully authenticated!",
+        /// Handle authorization check for root
+        if(process.env.ROOT_USER.toLowerCase() === signed_in.username) {
+
+            /// Skip authorization check if the user logged in is the root user
+            let generateToken = await session.generate_token({ 
+                payload : new schema.Authentication.Token.Payload({
+                    user_id : signed_in.userid,
+                    username : signed_in.username,
+                    root : true
+                })
+            });
+
+            if(generateToken.success == false) throw generateToken.error;
+
+            logger.info(`Root user [${ signed_in.username }] successfully authenticated!`)
+            
+            return new schema.Response.Auth.Signin({ 
+                statusCode : 200,
+                headers : { 'Content-Type': 'text/plain' },
+                cookies: [
+                    `sessionToken=${ generateToken.data.token }; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax`
+                ],
+                body : {
+                    message : "User successfully authenticated!",
+                }
+            });
+        }
+
+        /// Handle authorization check for user
+        /// Check if there are keys generated for users
+        else{
+
+            /// Draft the expected path of the key
+            let key = `${ USERS_PATH_PREFIX }/registered/${ process.env.AUTH_TYPE }/${ signed_in.userid }/key.json`;
+
+            /// Check if user is registered
+            let object = await storage.private.headObject(key);
+            
+            /// Ensure operation is successful
+            if(object.success == false) throw object.error;
+            
+            /// If there are no key issued for user, throw unauthorized
+            if(object.exists == false) return new schema.Response.Auth.Signin({
+                statusCode : 403,
+                body : {
+                    retry: signed_in.retry,
+                    message : "You are not authorized."
+                }
+            })
+            
+            /// Otherwise, return success
+            else {
+                
+                /// Generate a new token for standard user
+                let generateToken = await session.generate_token({ 
+                    payload : new schema.Authentication.Token.Payload({
+                        user_id : signed_in.userid,
+                        username : signed_in.username,
+                        root : false
+                    })
+                });
+
+                //// Ensure that the token generation is successful
+                if(generateToken.success == false) throw generateToken.error;
+
+                logger.info(`User [${ signed_in.username }] successfully authenticated!`);
+            
+                return new schema.Response.Auth.Signin({ 
+                    statusCode : 200,
+                    headers : { 'Content-Type': 'text/plain' },
+                    cookies: [
+                        `sessionToken=${ generateToken.data.token }; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax`
+                    ],
+                    body : {
+                        message : "User successfully authenticated!",
+                    }
+                });
             }
-        });
+        }
     }
 
     catch(e) {

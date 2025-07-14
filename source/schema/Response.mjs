@@ -18,9 +18,18 @@ export default class Response {
 
         static Signin = class extends Response.Base {
 
-            constructor() {
+            constructor({ cookies = [] }) {
                 super({ ...arguments[0] });
                 
+                this.cookies = Helper.validate(cookies, "array");
+            }
+        }
+
+        static Verify = class {
+            constructor({ isAuthorized = false, context = {} }) {
+
+                this.isAuthorized = Helper.validate(isAuthorized, "boolean");
+                this.context = Helper.validate(context, "object");
             }
         }
     }

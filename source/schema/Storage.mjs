@@ -31,4 +31,13 @@ export default class Storage {
             this.exists = exists;
         }
     }
+
+    static PutObject = class extends Storage.Base {
+
+        constructor({ updated = false }){
+            super({ ...arguments[0] });
+            
+            this.updated = updated;
+        }
+    }
 }

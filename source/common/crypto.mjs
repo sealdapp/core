@@ -112,7 +112,6 @@ export default class Crypto {
 
                     logger.debug(`Successfully converted exported key into PEM format`);
 
-                    console.log(content)
                     return new schema.Crypto.Export.RSA({
                         success : true,
                         format : format,

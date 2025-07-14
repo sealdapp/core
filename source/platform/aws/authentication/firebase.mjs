@@ -1,47 +1,34 @@
 "use strict";
 
-import { auth } from 'google-auth-library';
 import Authenticators from './interface.mjs';
 
 /// Import 3rd part libraries
-import jwt, { decode } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
+
+/// Import common libraries
+import Fetch from "../../../common/fetch.mjs";
 
 /// Module-scoped variables
 let schema;
 let logger;
 let validate;
 let fetch;
-let crypto;
-let secret;
-let storage;
 
 /// Firebase constant values
 const GOOGLE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 const GOOGLE_TOKEN_URL = "https://securetoken.google.com"
 
-/// Application's private key used by JWT to sign new token generated
-const JWT_PRIVATE_MAX_AGE = 30; // days
-const JWT_TOKEN_EXPIRY = "1h";
-
-/// Storage path prefix
-const USERS_PATH_PREFIX = "users";
-const USERS_TYPE_PREFIX = "oauth-firebase";
-
 export default class Authenticator extends Authenticators {
 
     #cache;
 
-    constructor(__schema, __logger, __validate, __fetch, __crypto, __secret, __storage) {
+    constructor(__schema, __logger, __validate) {
         super()
 
         /// Set module varaibles
         schema = __schema;
         logger = __logger;
         validate = __validate;
-        fetch = __fetch;
-        crypto = __crypto;
-        secret = __secret;
-        storage = __storage;
 
         /// Validate google client id if it exists inside environment variables
         if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROVIDERS").result == false) throw new Error("AUTH_FIREBASE_PROVIDERS is not defined.");
@@ -50,6 +37,8 @@ export default class Authenticator extends Authenticators {
         if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROJECTID").result == false) throw new Error("AUTH_FIREBASE_PROJECTID is not defined.");
 
         this.#cache = new Cache();
+        
+        fetch = new Fetch(schema, logger);
 
         logger.debug("firebase plugin instantiated.")
     }
@@ -60,14 +49,8 @@ export default class Authenticator extends Authenticators {
 
             logger.debug("Initializing plugin [firebase]")
 
-            /// Trigger initial retrieval of keys to force caching
-            let jwt_keys_cached = await this.#cache.JWT.getKeys();
-
-            /// Ensure caching of jwt public key is successful
-            if(jwt_keys_cached.success == false) throw jwt_keys_cached.error;
-
             /// Cache public key from google firebase
-            let firebase_cached = await this.#cache.Firebase.getKeys("init");
+            let firebase_cached = await this.#cache.getKeys("init");
 
             /// Ensure caching of public key is successful
             if(firebase_cached.success == false) throw firebase_cached.error;
@@ -81,47 +64,6 @@ export default class Authenticator extends Authenticators {
         catch(e) {
 
             logger.error(`Failed to initialize authenticator. ${ e.stack }`);
-
-            return new schema.Operation({
-                error : new Error(e.message)
-            })
-        }
-    }
-
-    async #generate_token({ payload = {} } = {}){
-        try {
-
-            logger.debug(`Generating new JWT token for username [${ payload.username }]`)
-
-            const secret = await this.#cache.JWT.getKeys();
-
-            /// Ensure retrieval of secret from cache is successful
-            if(secret.success == false) throw secret.error;
-
-            const options = {
-                algorithm: 'RS256',
-                expiresIn: JWT_TOKEN_EXPIRY,
-                issuer: 'your-app'
-            };
-            
-            logger.debug("Signing new JWT token for user.")
-
-            const token = jwt.sign(
-                Object.assign({}, payload), 
-                secret.data.private.value, 
-                options
-            );
-
-            logger.debug(`Successfully signed new token for user [${ payload.username }]`)
-            
-            return new schema.Operation({
-                success : true,
-                data : { token }
-            })
-        }
-        catch(e) {
-
-            logger.error(`Failed to generate new token. ${ e.stack }`);
 
             return new schema.Operation({
                 error : new Error(e.message)
@@ -155,7 +97,7 @@ export default class Authenticator extends Authenticators {
             if (!decoded || !decoded.header || !decoded.header.kid) throw new Error('Invalid token structure');
 
             /// Retrieve google's public key from cache
-            let cache_firebase_keys = await this.#cache.Firebase.getKeys(decoded.header.kid);
+            let cache_firebase_keys = await this.#cache.getKeys(decoded.header.kid);
 
             /// Ensure retrieval from cache is successful
             if(cache_firebase_keys.success == false) throw cache_firebase_keys.error;
@@ -188,80 +130,22 @@ export default class Authenticator extends Authenticators {
 
             logger.debug(`Verifying signin attempt for user [${ decoded.payload.email }]`)
 
-            // Verify the token
+            /// Verify the token
             let payload = jwt.verify(body.oauth_token, google_cert_pubkey[decoded.header.kid], {
                 algorithms: ['RS256'],
                 audience: process.env.AUTH_FIREBASE_PROJECTID,
                 issuer: `${ GOOGLE_TOKEN_URL }/${ process.env.AUTH_FIREBASE_PROJECTID }`
             });
 
-            /// Skip authorization check for root user
-            if(process.env.ROOT_USER.toLowerCase() === decoded.payload.email) {
+            logger.debug(`User [${ payload.email }] successfullly authenticated!`);
 
-                let generateToken = await this.#generate_token({ 
-                    payload : new schema.Authentication.Token.Payload({
-                        user_id : decoded.payload.user_id,
-                        username : decoded.payload.email,
-                        root : true
-                    })
-                });
+            return new schema.Authentication.SignIn({
+                success : true,
+                authenticated : true,
+                username : payload.email,
+                userid : payload.user_id
+            })
 
-                if(generateToken.success == false) throw generateToken.error;
-
-                logger.info(`Root user [${ decoded.payload.email }] successfully authenticated!`)
-
-                return new schema.Authentication.SignIn({
-                    success : true,
-                    authenticated : true,
-                    authorized : true,
-                    token : generateToken.data.token
-                })
-            }
-
-            /// Ensure that there is key issued for the user
-            else{
-
-                /// Draft the expected path of the key
-                let key = `${ USERS_PATH_PREFIX }/registered/${ USERS_TYPE_PREFIX }/${ decoded.payload.user_id }/key.json`;
-
-                /// Check if user is registered
-                let object = await storage.headObject(key);
-                
-                /// Ensure operation is successful
-                if(object.success == false) throw object.error;
-                
-                /// If there are no key issued for user, throw unauthorized
-                if(object.exists == false) return new schema.Authentication.SignIn({
-                    success : true,
-                    authenticated : true,
-                    authorized : false
-                })
-                
-                /// Otherwise, return success
-                else {
-                    
-                    /// Generate a new token for standard user
-                    let generateToken = await this.#generate_token({ 
-                        payload : new schema.Authentication.Token.Payload({
-                            username : decoded.payload.email,
-                            user_id : decoded.payload.user_id,
-                            root : false
-                        })
-                    });
-
-                    //// Ensure that the token generation is successful
-                    if(generateToken.success == false) throw generateToken.error;
-
-                    logger.info(`User [${ decoded.payload.email }] successfully authenticated!`);
-
-                    return new schema.Authentication.SignIn({
-                        success : true,
-                        authenticated : true,
-                        authorized : true,
-                        token : generateToken.data.token
-                    })
-                }
-            }
         }
         catch(e) {
 
@@ -293,302 +177,70 @@ export default class Authenticator extends Authenticators {
     verify(){  }
 
 
-    info(event){
-
-        logger.debug("Getting details of user from application jwt.")
-
-        const [ type, token ] = event.headers.authorization.split(' ');
-
-        /// JWT validation is already configured on AWS api gateway
-        const [ header, payload, signature ] = token.split('.');
-
-        const decoded = Buffer.from(payload, 'base64').toString('utf-8');
-
-        const data = JSON.parse(decoded);
-        
-        return new schema.Authentication.Info({ username : data.email });
-    }
+    info(){  }
 }
 
 
 const Cache = class {
-    
-    constructor(){
-        this.JWT = new this.JWT();
-        this.Firebase = new this.Firebase();
-    }
-    /**
-     * Caching process for internal JWT keys
-     */
-    JWT = class {
-        #privateKey = null;
-        #publicKey = null;
-
-        async getKeys(){
-            return await this.#retrieveJWTKeys();
-        }
-
-        async #retrieveJWTKeys() {
-
-            try {
-
-                logger.debug(`Retrieving keys from cache...`);
-
-                /// Check if private key is not yet cached
-                if(validate.Type.isNull(this.#privateKey).result == true) {
-
-                    logger.debug("Private key was not found locally.")
-
-                    /// If it doesn't, get jwt keys
-                    let retrieved = await this.#downloadJWTKeys();
-
-                    /// Ensure retrieval of jwt key was successful
-                    if(retrieved.success == false) throw retrieved.error;
-
-                    logger.debug("Updating local cache.")
-                    /// Store values in-memory
-                    this.#privateKey = retrieved.data.private.data.secret;
-                }
-                
-                logger.debug("Checking age of cached private key")
-
-                /// Check age of private key
-                let compare = validate.Date.isNewerThanDays({ 
-                    timestamp : this.#privateKey.lastModified, 
-                    days : JWT_PRIVATE_MAX_AGE
-                });
-
-                /// Ensure comparison is successful
-                if(compare.success == false) throw compare.error;
-
-                /// Return if it is still valid
-                if(compare.result == true) {
-
-                    logger.debug("Private key is still valid.")
-
-                    /// Return cached value
-                    return new schema.Operation({
-                        success : true,
-                        data : {
-                            private : this.#privateKey
-                        }
-                    })
-                }
-
-                /// Rotate key if it already expired
-                else {
-
-                    logger.debug("Cached private key already expired.");
-
-                    let refreshed = await this.#rotateJWTKeys();
-
-                    /// Ensure refresh of jwt keys is successful
-                    if(refreshed.success == false) throw refreshed.error;
-
-                    /// Retrieve jwt keys again
-                    let retrieved = await this.#downloadJWTKeys();
-
-                    /// Ensure retrieval of jwt key was successful
-                    if(retrieved.success == false) throw retrieved.error;
-                    
-                    /// Store values in-memory
-                    this.#privateKey = retrieved.data.private.data.secret;
-
-                    return new schema.Operation({
-                        success : true,
-                        data : {
-                            private : this.#privateKey
-                        }
-                    })
-                }
-            }
-            catch(e) {
-
-                logger.error(`Failed to cache jwt keys. ${ e.stack }`);
-
-                return new schema.Operation({
-                    error : new Error(e.message)
-                })
-            }
-        }
-
-        async #downloadJWTKeys(){
-
-            try{
-
-                logger.debug("Downloading jwt private key from parameter store");
-                
-                /// Retrieve jwt private key
-                let privateKey = await secret.get({
-                    name : process.env.SECRET_JWT_PRIVATE
-                })
-
-                /// Ensure that the parameter resource exists
-                if(privateKey.data.secret.exists == false) throw new Error("Secret resource does not exists.");
-
-                /// Ensure retrieval of jwt private key is successful
-                if(privateKey.success == false) throw privateKey.error;
-                
-                /// Rotate jwt key if private key is not a valid value
-                /// This can happen during initial set ups
-                if(validate.String.contains(privateKey.data.secret.value, "BEGIN PRIVATE KEY").result == false) {
-
-                    logger.debug("Private key is not a valid value. Refreshing keys...");
-
-                    let refreshed = await this.#rotateJWTKeys();
-
-                    /// Ensure refresh of jwt keys is successful
-                    if(refreshed.success == false) throw refreshed.error;
-                    
-                    /// Retrieve private key again after rotation
-                    privateKey = await secret.get({
-                        name : process.env.SECRET_JWT_PRIVATE
-                    })
-
-                    /// Ensure retrieval of jwt private key is successful
-                    if(privateKey.success == false) throw privateKey.error;
-                }
-
-                logger.debug(`Successfully retrieved private key for jwt`)
-
-                return new schema.Operation({
-                    success : true,
-                    data : {
-                        private : privateKey
-                    }
-                })
-            }
-            catch(e) {
-
-                logger.error(`Failed to get jwt keys. ${ e.stack }`);
-
-                return new schema.Operation({
-                    error : new Error(e.message)
-                })
-            }
-        }
-
-        async #rotateJWTKeys(){
-            try{
-
-                /// Create new RSA key pair
-                let key = await crypto.Create.rsa({
-                    extractable : true,
-                    usages : ["sign", "verify"]
-                });
-
-                /// Ensure key creation is successful
-                if(key.success == false) throw key.error;
-
-                /// Export private key
-                let privateKey = await crypto.Export.rsa({
-                    key : key.privateKey,
-                    convert : true,
-                    format : "pem"
-                })
-
-                /// Ensure private key was exported successfully
-                if(privateKey.success == false) throw privateKey.error;
-
-                /// Upload private key to secrets 
-                let uploaded_private = await secret.set({
-                    name : process.env.SECRET_JWT_PRIVATE,
-                    value : privateKey.key
-                });
-
-                /// Ensure uploading of private key to secrets is successful
-                if(uploaded_private.success == false) throw uploaded_private.error;
-
-                /// Export public key
-
-                /// Ensure public key was exported succesfully
-
-                /// Upload public key to storage
-
-                /// Ensure uploading of public key to storage is successful
-
-                return new schema.Operation({
-                    success : true
-                })
-            }
-            catch(e){
-
-                logger.error(`Failed to refresh jwt keys. ${ e.stack }`);
-
-                return new schema.Operation({
-                    error : new Error(e.message)
-                })
-            }
-        }
-    }
-
-    /**
-     * Process for caching google firebase public key
-     * 
-     * Refresh of public key can be handled when cloud function instance expired
-     * This effectively provisions a new function and will try to refresh the pubkey again
-     */
-    Firebase = class {
         
-        /// Stores cache of google cert
-        #google_cert_pubkey;
+    /// Stores cache of google cert
+    #google_cert_pubkey;
 
-        async getKeys(kid){
+    async getKeys(kid){
 
-            /// If the kid supplied does not exists from cache, refresh cache
-            if(validate.Property.isExistsKey(this.#google_cert_pubkey, kid).result == false) {
+        /// If the kid supplied does not exists from cache, refresh cache
+        if(validate.Property.isExistsKey(this.#google_cert_pubkey, kid).result == false) {
 
-                logger.debug(`kid [${ kid }] does not exists from local cache. Refreshing...`);
+            logger.debug(`kid [${ kid }] does not exists from local cache. Refreshing...`);
 
-                return await this.#retrieveFirebaseKeys();
+            return await this.#retrieveFirebaseKeys();
+        }
+
+        logger.debug(`kid [${ kid }] found on local cache.`);
+        /// Else, return value
+        return new schema.Operation({
+            success : true,
+            data : {
+                google_cert_pubkey : this.#google_cert_pubkey
             }
+        })
+    }
+    async #retrieveFirebaseKeys() {
 
-            logger.debug(`kid [${ kid }] found on local cache.`);
-            /// Else, return value
-            return new schema.Operation({
+        try {
+
+            logger.debug(`Retrieving public key from google firebase.`);
+
+            /// Retrieve google firebase public key
+            let response = await fetch.get({ 
+                url : GOOGLE_CERTS_URL
+            });
+
+            /// Ensure response is successful
+            if(response.success == false) throw new Error(`Returns failure. ${ response.error.message }`)
+
+            /// Ensure response returns 200 response code
+            if(response.code != 200) throw new Error(`Returns non-200 response code. ${ response.code }. ${ response.error.message }`)
+            
+            logger.debug("Successfully retrieved public key from google secure token system")
+
+            this.#google_cert_pubkey = { ...this.#google_cert_pubkey, ...(await response.data.json()) };
+
+            return new schema.Operation({ 
                 success : true,
                 data : {
                     google_cert_pubkey : this.#google_cert_pubkey
                 }
-            })
+            });
         }
-        async #retrieveFirebaseKeys() {
+        catch(e) {
 
-            try {
+            logger.error(`Failed to cache public key. ${ e.stack }`);
 
-                logger.debug(`Retrieving public key from google firebase.`);
+            return new schema.Operation({ 
+                error : new Error(e.message)
+            });
 
-                /// Retrieve google firebase public key
-                let response = await fetch.get({ 
-                    url : GOOGLE_CERTS_URL
-                });
-
-                /// Ensure response is successful
-                if(response.success == false) throw new Error(`Returns failure. ${ response.error.message }`)
-
-                /// Ensure response returns 200 response code
-                if(response.code != 200) throw new Error(`Returns non-200 response code. ${ response.code }. ${ response.error.message }`)
-                
-                logger.debug("Successfully retrieved public key from google secure token system")
-
-                this.#google_cert_pubkey = { ...this.#google_cert_pubkey, ...(await response.data.json()) };
-
-                return new schema.Operation({ 
-                    success : true,
-                    data : {
-                        google_cert_pubkey : this.#google_cert_pubkey
-                    }
-                });
-            }
-            catch(e) {
-
-                logger.error(`Failed to cache public key. ${ e.stack }`);
-
-                return new schema.Operation({ 
-                    error : new Error(e.message)
-                });
-
-            }
         }
     }
 }

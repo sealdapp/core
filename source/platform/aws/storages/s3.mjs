@@ -1,7 +1,7 @@
 "use strict";
 
 /// Import 3rd part libraries
-import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3, S3Client } from '@aws-sdk/client-s3';
 
 /// Import application libraries
 import Storages from './interface.mjs';
@@ -102,7 +102,7 @@ export default class Storage extends Storages {
                 default : {
                     logger.error(`[${ this.#bucket }] Failed to head object. ${ e.stack }`);
 
-                    return new schema.Authentication.HeadObject({
+                    return new schema.Storage.HeadObject({
                         error : new Error(e.message)
                     })
                 }
@@ -118,7 +118,6 @@ export default class Storage extends Storages {
 
             logger.debug(`[${ this.#bucket }] Getting object with key [${ key }]`)
 
-
             const command = new GetObjectCommand({
                 Bucket : this.#bucket,
                 Key : key
@@ -126,9 +125,42 @@ export default class Storage extends Storages {
         }
         catch(e) {
 
-            logger.error(`Failed to get key. ${ e.stack }`);
+            logger.error(`[${ this.#bucket }] Failed to get key. ${ e.stack }`);
 
-            return new schema.Storage.Get({
+            return new schema.Storage.GetObject({
+                error : new Error(e.message)
+            })
+        }
+    }
+
+    async putObject(key, body) {
+        
+        try{
+            /// Ensure key exists
+            if(validate.String.isNotEmpty(key).result == false) throw new Error(`Key is not defined.`);
+
+            /// Ensure body exists
+            if(validate.Type.isString(body).result == false) throw new Error(`Body is not in string format`);
+
+            logger.debug(`[${ this.#bucket }] Putting object with key [${ key }]`)
+
+            const command = new PutObjectCommand({
+                Bucket : this.#bucket,
+                Key : key,
+                Body : body
+            });
+
+            const response = await this.#client.send(command);
+
+            return new schema.Storage.PutObject({
+                success : true,
+                updated : true
+            })
+        }
+        catch(e) {
+            logger.error(`[${ this.#bucket }] Failed to put object to bucket. ${ e.stack }`);
+
+            return new schema.Storage.PutObject({
                 error : new Error(e.message)
             })
         }

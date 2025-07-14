@@ -1,5 +1,5 @@
 {
-  "watch": ["test"],  
-  "ext": "js,json",         
+  "watch": [ "test", "../source" ],  
+  "ext": "js,mjs,json",         
   "exec": "echo '' > ../logs/app.log; mocha --require ./test/00_setup.js"      
 }
