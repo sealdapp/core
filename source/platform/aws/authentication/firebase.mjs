@@ -106,7 +106,7 @@ export default class Authenticator extends Authenticators {
             let google_cert_pubkey = cache_firebase_keys.data.google_cert_pubkey;
 
             /// Second attempt, throw failure
-            if(validate.Property.isExistsKey(google_cert_pubkey, decoded.header.kid).result == false) throw new Error("Invalid token.");
+            if(validate.Property.isExistsKey(google_cert_pubkey, decoded.header.kid).result == false) throw new jwt.TokenExpiredError("Invalid token.");
 
             /// Validate if email address exists
             if(validate.Property.isExistsKey(decoded.payload, "email").result == false) throw new Error("Email is not known from token payload.");

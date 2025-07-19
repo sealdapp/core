@@ -10,6 +10,8 @@ import Secret from "./Secret.mjs";
 import Authentication from "./Authentication.mjs";
 import Storage from "./Storage.mjs";
 
+import Keys from "./Keys.mjs";
+
 export default class Schema {
 
     constructor(){
@@ -21,5 +23,7 @@ export default class Schema {
         this.Secret = Secret;
         this.Authentication = Authentication;
         this.Storage = Storage;
+
+        this.Keys = Keys;
     }
 }

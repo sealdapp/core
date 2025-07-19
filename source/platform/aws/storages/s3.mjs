@@ -122,14 +122,38 @@ export default class Storage extends Storages {
                 Bucket : this.#bucket,
                 Key : key
             })
+
+            let response = await this.#client.send(command);
+
+            return new schema.Storage.GetObjectCommand({
+                success : true,
+                exists : true
+            })
+
         }
         catch(e) {
+            
+            switch (e.name) {
 
-            logger.error(`[${ this.#bucket }] Failed to get key. ${ e.stack }`);
+                /// Handle invalid token
+                case "NoSuchKey" : {
+                    logger.error(`[${ this.#bucket }] Key [${ key }] not found.`);
 
-            return new schema.Storage.GetObject({
-                error : new Error(e.message)
-            })
+                    return new schema.Storage.GetObject({
+                        success : true,
+                        exists : false
+                    })
+                }
+
+                /// Unhandled exceptions
+                default : {
+                    logger.error(`[${ this.#bucket }] Failed to get object. ${ e.stack }`);
+
+                    return new schema.Storage.GetObject({
+                        error : new Error(e.message)
+                    })
+                }
+            }
         }
     }
 

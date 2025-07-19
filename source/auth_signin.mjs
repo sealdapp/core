@@ -8,6 +8,7 @@ import Schema from "./schema/Schema.mjs";
 import Logger from "./common/logger.mjs";
 import Validator from "./common/validator.mjs";
 import Utilities from "./common/utils.mjs";
+import Middleware from "./common/middleware.mjs";
 import Crypto from "./common/crypto.mjs";
 import Session from "./common/session.mjs";
 import Platform from "./platform/platform.mjs";
@@ -17,6 +18,7 @@ const logger = new Logger(path);
 const schema = new Schema();
 const validate = new Validator(schema, logger);
 const utils = new Utilities(schema, logger, validate);
+const middleware = new Middleware(schema, logger, validate, utils);
 const crypto = new Crypto(schema, logger, validate);
 const platform = new Platform(schema, logger, validate);
 
@@ -46,19 +48,19 @@ await (async function init(){
     secret = new plugins.Secret(schema, logger, validate);
 
     /// Initialize secrets plugin
-    utils.Initializer.initialize(await secret.init());
+    await middleware.Initializer.initialize(await secret.init());
     
     /// Storage library
     storage.private = new plugins.Storage(schema, logger, validate);
     
     /// Initialize key storage plugin instance
-    utils.Initializer.initialize(await storage.private.init(process.env.STORAGE_BUCKET_PRIVATE));
+    await middleware.Initializer.initialize(await storage.private.init(process.env.STORAGE_BUCKET_PRIVATE));
 
     /// Authentication library
     auth = new plugins.Authenticator(schema, logger, validate);
 
     /// Initialize authenticator plugin
-    utils.Initializer.initialize(await auth.init());
+    await middleware.Initializer.initialize(await auth.init());
 
     logger.info("Plugins successfullly loaded.");
 
@@ -66,7 +68,7 @@ await (async function init(){
     session = new Session(schema, logger, validate, crypto, secret);
 
     /// Initialize session manager
-    utils.Initializer.initialize(await session.init());
+    await middleware.Initializer.initialize(await session.init());
 
     logger.info(`Application successfully initialized.`)
 
@@ -186,7 +188,6 @@ export const handler = async(event) => {
         logger.error(`Something went wrong. ${ e.stack }`)
         
         return new schema.Response.Auth.Signin({ 
-            statusCode : 500,
             body : {
                 message : e.message 
             }

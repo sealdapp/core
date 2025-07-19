@@ -10,10 +10,6 @@ let validate;
 let crypto;
 let secret;
 
-/// Application's private key used by JWT to sign new token generated
-const JWT_PRIVATE_MAX_AGE = 30; // days
-const JWT_TOKEN_EXPIRY = "1h";
-
 export default class Session {
     
     #cache;
@@ -27,11 +23,11 @@ export default class Session {
         crypto = __crypto;
         secret = __secret;
 
-        /// Validate google client id if it exists inside environment variables
-        if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROVIDERS").result == false) throw new Error("AUTH_FIREBASE_PROVIDERS is not defined.");
+        /// Validate if jwt token issuer is defined
+        if(validate.Property.isExistsKey(process.env, "APP_JWT_ISSUER").result == false) throw new Error("APP_JWT_ISSUER is not defined.");
 
-        /// Validate google client id if it exists inside environment variables
-        if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROJECTID").result == false) throw new Error("AUTH_FIREBASE_PROJECTID is not defined.");
+        /// Validate if jwt token expiry configuration is defined
+        if(validate.Property.isExistsKey(process.env, "APP_JWT_TOKEN_EXPIRY").result == false) throw new Error("APP_JWT_TOKEN_EXPIRY is not defined.");
 
         this.#cache = new Cache();
 
@@ -77,8 +73,8 @@ export default class Session {
 
             const options = {
                 algorithm: 'RS256',
-                expiresIn: JWT_TOKEN_EXPIRY,
-                issuer: 'your-app'
+                expiresIn: process.env.APP_JWT_TOKEN_EXPIRY,
+                issuer: process.env.APP_JWT_ISSUER
             };
             
             logger.debug("Signing new JWT token for user.")
@@ -125,6 +121,9 @@ export default class Session {
                 algorithms: ['RS256']
             });
 
+            /// Ensure issuer is this application
+            if(payload.iss != process.env.APP_JWT_ISSUER) throw new Error("Invalid issuer.");
+
             logger.debug(`Successfully verified token.`);
 
             return new schema.Operation({
@@ -141,195 +140,11 @@ export default class Session {
         }
     }
 
-
-}
-
-const Cache = class {
-
-    #keyPair = null;
-
-    async getKeys() {
-
-        try {
-
-            logger.debug(`Retrieving keys from cache...`);
-
-            /// Check if keypair is not yet cached
-            if(validate.Type.isNull(this.#keyPair).result == true) {
-
-                logger.debug("Private key was not found locally.")
-
-                /// If it doesn't, get jwt keys
-                let retrieved = await this.#downloadJWTKeys();
-
-                /// Ensure retrieval of jwt key was successful
-                if(retrieved.success == false) throw retrieved.error;
-
-                logger.debug("Updating local cache.")
-                
-
-                /// Store values in-memory
-                this.#keyPair = retrieved.data.secret;
-            }
-            
-            logger.debug("Checking age of cached key pair")
-
-            /// Check age of keypair
-            let compare = validate.Date.isNewerThanDays({ 
-                timestamp : this.#keyPair.lastModified, 
-                days : JWT_PRIVATE_MAX_AGE
-            });
-
-            /// Ensure comparison is successful
-            if(compare.success == false) throw compare.error;
-
-            /// Return if it is still valid
-            if(compare.result == true) {
-
-                logger.debug("Private key is still valid.")
-
-                /// Return cached value
-                return new schema.Operation({
-                    success : true,
-                    data : {
-                        keyPair : this.#keyPair
-                    }
-                })
-            }
-
-            /// Rotate key if it already expired
-            else {
-
-                logger.debug("Cached private key already expired. Downloading fresh copy");
-
-                /// Retrieve jwt keys
-                let retrieved = await this.#downloadJWTKeys();
-
-                /// Ensure retrieval of jwt key was successful
-                if(retrieved.success == false) throw retrieved.error;
-
-                /// Store values in-memory
-                this.#keyPair = retrieved.data.secret;
-                
-                /// Check age of keypair again
-                compare = validate.Date.isNewerThanDays({ 
-                    timestamp : this.#keyPair.lastModified, 
-                    days : JWT_PRIVATE_MAX_AGE
-                });
-
-                /// Ensure comparison is successful
-                if(compare.success == false) throw compare.error;
-
-                /// Return if it is still valid
-                if(compare.result == true) {
-
-                    logger.debug("Retrieved key is still valid.")
-
-                    /// Return cached value
-                    return new schema.Operation({
-                        success : true,
-                        data : {
-                            keyPair : this.#keyPair
-                        }
-                    })
-                }
-                else{
-
-                    logger.debug("Retrieved key is also expired. Rotating keys.");
-
-                    let refreshed = await this.#rotateJWTKeys();
-
-                    /// Ensure refresh of jwt keys is successful
-                    if(refreshed.success == false) throw refreshed.error;
-
-                    /// Return cached value
-                    return new schema.Operation({
-                        success : true,
-                        data : {
-                            keyPair : this.#keyPair
-                        }
-                    })
-                }
-            }
-        }
-        catch(e) {
-
-            logger.error(`Failed to cache jwt keys. ${ e.stack }`);
-
-            return new schema.Operation({
-                error : new Error(e.message)
-            })
-        }
-    }
-
-    async #downloadJWTKeys(){
+    async rotate_keys() {
 
         try{
 
-            let keyPair
-
-            logger.debug("Downloading jwt private key from parameter store");
-            
-            /// Retrieve jwt private key
-            let keys = await secret.get({
-                name : process.env.SECRET_JWT_PRIVATE
-            })
-
-            /// Ensure retrieval of jwt keys is successful
-            if(keys.success == false) throw keys.error;
-
-            /// Ensure that the parameter resource exists
-            if(keys.data.secret.exists == false) throw new Error("Secret resource does not exists.");
-            
-            try{
-                /// Try to parse downloaded keys
-                keyPair = JSON.parse(keys.data.secret.value)
-
-                /// Rotate jwt key if value is not in expected format
-                if(await validate.Property.isExistsKeys(keyPair, [ "private", "public" ]).result == false) {
-
-                    throw new Error("Keys are not a valid value. Forcing refresh");
-                    
-                }
-            }
-            catch(e){
-
-                /// Rotate jwt keys
-                let refreshed = await this.#rotateJWTKeys();
-
-                /// Ensure refresh of jwt keys is successful
-                if(refreshed.success == false) throw refreshed.error;
-            
-                /// Retrieve jwt private key
-                keys = await secret.get({
-                    name : process.env.SECRET_JWT_PRIVATE
-                })
-
-                /// Ensure retrieval of jwt keys is successful
-                if(keys.success == false) throw keys.error;
-            }
-
-            /// Parse value of actual secret
-            keys.data.secret.value = JSON.parse(keys.data.secret.value)
-
-            logger.debug(`Successfully retrieved private key for jwt`)
-
-            return keys;
-        }
-        catch(e) {
-
-            logger.error(`Failed to get jwt keys. ${ e.stack }`);
-
-            return new schema.Operation({
-                error : new Error(e.message)
-            })
-        }
-    }
-
-    async #rotateJWTKeys(){
-        try{
-
-            logger.debug("Rotating JWT key pair.");
+            logger.debug("Rotating JWT session key pair.");
 
             /// Create new RSA key pair
             let key = await crypto.Create.rsa({
@@ -379,6 +194,119 @@ const Cache = class {
         catch(e){
 
             logger.error(`Failed to refresh jwt keys. ${ e.stack }`);
+
+            return new schema.Operation({
+                error : new Error(e.message)
+            })
+        }
+    }
+}
+
+const Cache = class {
+
+    #keyPair = null;
+
+    async getKeys() {
+
+        try {
+
+            logger.debug(`Retrieving keys from cache...`);
+
+            /// Check if keypair is not yet cached
+            if(validate.Type.isNull(this.#keyPair).result == true) {
+
+                logger.debug("Key pair was not found locally.")
+
+                /// If it doesn't, get jwt keys
+                let retrieved = await this.#downloadJWTKeys();
+
+                /// Ensure retrieval of jwt key was successful
+                if(retrieved.success == false) throw retrieved.error;
+
+                logger.debug("Updating local cache.")
+                
+                /// Store values in-memory
+                this.#keyPair = retrieved.data.secret;
+
+            }
+
+            else{
+                
+                /// Force download jwt keys if keys doesn't match Month
+                if(new Date(Date.now()).getMonth() != new Date(this.#keyPair.lastModified).getMonth()) {
+
+                    logger.debug("Key pair timestamp mismatch.")
+
+                    /// If it doesn't, get jwt keys
+                    let retrieved = await this.#downloadJWTKeys();
+
+                    /// Ensure retrieval of jwt key was successful
+                    if(retrieved.success == false) throw retrieved.error;
+
+                    logger.debug("Updating local cache.")
+                    
+                    /// Store values in-memory
+                    this.#keyPair = retrieved.data.secret;
+                }
+            }
+
+            /// Return cached value
+            return new schema.Operation({
+                success : true,
+                data : {
+                    keyPair : this.#keyPair
+                }
+            })
+        }
+        catch(e) {
+
+            logger.error(`Failed to cache jwt keys. ${ e.stack }`);
+
+            return new schema.Operation({
+                error : new Error(e.message)
+            })
+        }
+    }
+
+    async #downloadJWTKeys(){
+
+        try{
+
+            let keyPair
+
+            logger.debug("Downloading jwt private key from parameter store");
+            
+            /// Retrieve jwt private key
+            let keys = await secret.get({
+                name : process.env.SECRET_JWT_PRIVATE
+            })
+
+            /// Ensure retrieval of jwt keys is successful
+            if(keys.success == false) throw keys.error;
+
+            /// Ensure that the parameter resource exists
+            if(keys.data.secret.exists == false) throw new Error("Secret resource does not exists.");
+            
+            /// Try to parse downloaded keys
+            keyPair = JSON.parse(keys.data.secret.value)
+
+            /// Rotate jwt key if value is not in expected format
+            if(await validate.Property.isExistsKeys(keyPair, [ "private", "public" ]).result == false) {
+
+                throw new Error("Keys are not a valid value.");
+                
+            }
+
+            /// Parse value of actual secret
+            keys.data.secret.value = JSON.parse(keys.data.secret.value)
+
+            logger.debug(`Successfully retrieved private key for jwt`)
+
+            return keys;
+        }
+        catch(e) {
+
+            logger.error(`Failed to get jwt keys. ${ e.stack }`);
 
             return new schema.Operation({
                 error : new Error(e.message)

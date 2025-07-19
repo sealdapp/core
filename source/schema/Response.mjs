@@ -14,6 +14,13 @@ export default class Response {
         }
     }
 
+    static Jobs = class extends Response.Base {
+
+        constructor() {
+            super({ ...arguments[0] });
+        }
+    }
+
     static Auth = class {
 
         static Signin = class extends Response.Base {
@@ -38,14 +45,24 @@ export default class Response {
 
         static Get = class extends Response.Base {
 
-            constructor({ keys = [], root = false }) {
+            constructor({ device = null, master = null, root = false }) {
                 super({ ...arguments[0] });
 
-                this.body = JSON.stringify({ 
-                    keys : keys,
-                    count : keys.length,
-                    root : root
-                });
+                /// Include master key if requester is root
+                if(root) {
+                    this.body = JSON.stringify({ 
+                        keys : {  device, master },
+                        root : root
+                    });
+                }
+
+                /// Otherwise, return device key only
+                else{
+                    this.body = JSON.stringify({ 
+                        keys : {  device },
+                        root : root
+                    });
+                }
             }
         }
     }

@@ -17,16 +17,40 @@ export default class Utilities {
         logger.debug("Instantiated utils module");
     }
 
-    Initializer = class {
+    Parser = class {
 
-        static async initialize(response){
+        static async cookies(list) {
 
-            /// Ensure secret initialization is successful
-            if(response.success == false) throw response.error;
-
+            try {
+                logger.debug(`Parsing cookie list.`);
+        
+                /// Ensure list is in array type
+                if(validate.Type.isArray(list).result == false) throw new Error(`Data provided is not of list format.`);
+        
+                const parsed = {};
+                for (const cookie of list) {
+                    const [key, ...val] = cookie.split('=');
+        
+                    /// Join back the values, remove trailing spaces and semicolons
+                    parsed[key.trim()] = val.join('=').trim().replace(/;$/, ''); // handles '=' in value
+                }
+            
+                logger.debug("Successfully parsed cookie.")
+        
+                return new schema.Operation({
+                    success : true,
+                    data : { parsed }
+                })
+            }
+            catch(e) {
+        
+                logger.error(`Failed to parse cookie. ${ e.stack }`);
+        
+                return new schema.Operation({
+                    error : new Error(e.message)
+                })
+            }
         }
     }
 
-
-    
 }

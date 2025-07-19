@@ -8,9 +8,6 @@ import Schema from "./schema/Schema.mjs";
 import Logger from "./common/logger.mjs";
 import Validator from "./common/validator.mjs";
 import Utilities from "./common/utils.mjs";
-import Middleware from "./common/middleware.mjs";
-import Crypto from "./common/crypto.mjs";
-import Session from "./common/session.mjs";
 import Platform from "./platform/platform.mjs";
 
 /// Initialize libraries
@@ -18,7 +15,6 @@ const logger = new Logger(path);
 const schema = new Schema();
 const validate = new Validator(schema, logger);
 const utils = new Utilities(schema, logger, validate);
-const middleware = new Middleware(schema, logger, validate, utils);
 const crypto = new Crypto(schema, logger, validate);
 const platform = new Platform(schema, logger, validate);
 
@@ -44,13 +40,13 @@ await (async function init(){
     secret = new plugins.Secret(schema, logger, validate);
 
     /// Initialize secrets plugin
-    await middleware.Initializer.initialize(await secret.init());
+    await utils.Initializer.initialize(await secret.init());
 
     /// Authentication library
     auth = new plugins.Authenticator(schema, logger, validate);
 
     /// Initialize authenticator plugin
-    await middleware.Initializer.initialize(await auth.init());
+    await utils.Initializer.initialize(await auth.init());
 
     logger.info("Plugins successfullly loaded.");
 
@@ -58,7 +54,7 @@ await (async function init(){
     session = new Session(schema, logger, validate, crypto, secret);
 
     /// Initialize session manager
-    await middleware.Initializer.initialize(await session.init());
+    await utils.Initializer.initialize(await session.init());
 
     logger.info(`Application successfully initialized.`)
 
@@ -68,37 +64,28 @@ export const handler = async(event) => {
 
     try {
 
-        logger.info(`Verifying authentication.`)
-        
-        /// Extract token from cookie
-        let token = await middleware.Handler.token(event);
+        logger.info(`Setting up keys.`);
 
-        if(token.success == false) return new schema.Response.Auth.Verify({
-            context : { message : token.error.message }
-        })
+        /// Ensure user is root
 
-        /// Verify token parsed from cookie
-        let verify = await session.verify_token({ token : token.data.parsed });
+        /// Ensure master key is supplied
 
-        /// Ensure verification operation is successful
-        if(verify.success == false) return new schema.Response.Auth.Verify({
-            context : { message : "Invalid session token." }
-        })
+        /// Ensure root device key is supplied
 
-        return new schema.Response.Auth.Verify({
-            isAuthorized : verify.data.isAuthorized
-        })
+        /// Ensure master key doesn't exists yet
+
+        /// Ensure root device key doesn't exists yet
+
+        /// Store master key
+
+        /// Store root device key
+
     }
 
     catch(e) {
 
         logger.error(`Something went wrong. ${ e.stack }`)
         
-        
-        return new schema.Response.Auth.Verify({
-            context : {
-                message : e.message
-            }
-        })
+        return new schema.Response.Jobs({ })
     }
 }

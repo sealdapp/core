@@ -68,25 +68,16 @@ export const handler = async(event) => {
 
     try {
 
-        logger.info(`Verifying authentication.`)
-        
-        /// Extract token from cookie
-        let token = await middleware.Handler.token(event);
-
-        if(token.success == false) return new schema.Response.Auth.Verify({
-            context : { message : token.error.message }
-        })
+        logger.info(`Starting job - Session key rotation.`)
 
         /// Verify token parsed from cookie
-        let verify = await session.verify_token({ token : token.data.parsed });
+        let rotated = await session.rotate_keys();
 
         /// Ensure verification operation is successful
-        if(verify.success == false) return new schema.Response.Auth.Verify({
-            context : { message : "Invalid session token." }
-        })
+        if(rotated.success == false) throw rotated.error;
 
-        return new schema.Response.Auth.Verify({
-            isAuthorized : verify.data.isAuthorized
+        return new schema.Response.Jobs({
+            statusCode : 200 
         })
     }
 
@@ -94,11 +85,6 @@ export const handler = async(event) => {
 
         logger.error(`Something went wrong. ${ e.stack }`)
         
-        
-        return new schema.Response.Auth.Verify({
-            context : {
-                message : e.message
-            }
-        })
+        return new schema.Response.Jobs({ })
     }
 }
