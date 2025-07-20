@@ -15,8 +15,10 @@ export default class Keys {
 
     static Master = class {
 
-        constructor({ key = {} }){
-            
+        constructor({ key = {}, exists = false }){
+
+            this.key = Helper.validate(key, "object");
+            this.exists = Helper.validate(exists, "boolean");
         }
 
     }

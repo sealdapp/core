@@ -22,15 +22,15 @@ const platform = new Platform(schema, logger, validate);
 /// Declaration of plugins
 let storage = {};
 
-/// Storage path prefix
-const KEYS_PATH_PREFIX = "keys";
-
 await (async function init(){
 
     logger.info("Initializing application...");
 
     /// Ensure root user email is defined
     if(validate.Property.isExistsKey(process.env, "ROOT_USER").result == false) throw new Error("ROOT_USER not configured.");
+    
+    /// Validate if s3 bucket is defined
+    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
     let plugins = await platform.load();
@@ -54,8 +54,6 @@ export const handler = async(event) => {
         /// Get user information from cookie
         let token = await middleware.Handler.token(event);
 
-        console.log(token)
-
         /// Return bad request if token information extraction failed
         if(token.success == false) return new schema.Response.Keys.Get({
             statusCode : 400,
@@ -67,21 +65,56 @@ export const handler = async(event) => {
         /// Check if root user
         if(token.data.decoded.root) {
 
+            /// Get master key
+            let master_key = await storage.private.getObject(`root/master-key.json`);
+
+            /// Ensure retrieval of master key is successful
+            if(master_key.success == false) throw master_key.error;
+
+            /// Return empty master key if master key is not found
+            /// This should effectively signal that the keys has not been set up
+            if(master_key.exists == false) return new schema.Response.Keys.Get({
+                statusCode : 200,
+                device : new schema.Keys.Device({}),
+                master : new schema.Keys.Master({}),
+                root : true
+            })
+
+
             /// Get root device key
-            let root_key = await storage.private.getObject(`${ KEYS_PATH_PREFIX }/root/keys.json`);
+            let root_key = await storage.private.getObject(`root/user-key.json`);
 
             /// Ensure retrieval of rootkey is successful
             if(root_key.success == false) throw root_key.error;
 
-            console.log(root_key)
-            /// Get master key
+            /// Return empty user-key if not yet setup
+            if(root_key.exists == false) return new schema.Response.Keys.Get({
+                statusCode : 200,
+                device : new schema.Keys.Device({}),
+                master : new schema.Keys.Master({}),
+                root : true
+            })
+
+            /// Parse root device key if it exists
+            let key_value_root = await utils.Parser.bufferToJson(root_key.data);
+
+            /// Ensure parsing of root key value is successful
+            if(key_value_root.success == false) throw key_value_root.error;
+
+            return new schema.Response.Keys.Get({
+                statusCode : 200,
+                device : new schema.Keys.Device({}),
+                master : new schema.Keys.Master({}),
+                root : true
+            })
+
         }
 
         /// Otherwise, get keys for user
         else{
 
             /// Get user device key
-            let user_key = await storage.private.getObject(`${ KEYS_PATH_PREFIX }/users/${ token.data.decoded.user_id }`);
+            let user_key = await storage.private.getObject(`users/registered/${ token.data.decoded.auth_type }/${ token.data.decoded.user_id }/user-key.json`);
 
             /// Ensure retrieval of user key is successful
             if(user_key.success == false) throw user_key.error;
@@ -90,14 +123,25 @@ export const handler = async(event) => {
             if(user_key.exists == false) return new schema.Response.Keys.Get({
                 statusCode : 200,
                 device : new schema.Keys.Device({}),
-                root : false,
+                root : false
             });
-        }
-        
+            
+            /// Convert user key data into json format for transmission
+            let key_value = await utils.Parser.bufferToJson(user_key.data)
 
-        return new schema.Response.Keys.Get({
-            statusCode : 200
-        })
+            /// Ensure conversion is successful
+            if(key_value.success == false) throw key_value.error;
+
+            /// Return actual user key if it exists
+            return new schema.Response.Keys.Get({
+                statusCode : 200,
+                device : new schema.Keys.Device({
+                    key : key_value.data.json,
+                    exists : user_key.exists
+                }),
+                root : false
+            })
+        }
     }
 
     catch(e) {
@@ -105,6 +149,8 @@ export const handler = async(event) => {
         logger.error(`Something went wrong. ${ e.stack }`)
 
         return new schema.Response.Keys.Get({
+            device : new schema.Keys.Device({}),
+            master : new schema.Keys.Master({}),
             body : {
                 message : e.message 
             }

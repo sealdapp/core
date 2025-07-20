@@ -41,6 +41,9 @@ await (async function init(){
     /// Ensure jwt private key to be used is defined
     if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result == false) throw new Error("SECRET_JWT_PRIVATE not configured");
     
+    /// Validate if s3 bucket is defined
+    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
+    
     /// Load all the plugins for the platform
     let plugins = await platform.load();
 
@@ -83,7 +86,9 @@ export const handler = async(event) => {
         /// Ensure event have request body
         if(validate.Property.isExistsKey(event, "body").result == false) return new schema.Response.Auth.Signin({
             statusCode : 400,
-            message : "Bad request"
+            body : {
+                message : "Bad request"
+            }
         })
 
         /// Pass event body to authenticator signin method
@@ -108,6 +113,7 @@ export const handler = async(event) => {
             /// Skip authorization check if the user logged in is the root user
             let generateToken = await session.generate_token({ 
                 payload : new schema.Authentication.Token.Payload({
+                    auth_type : process.env.AUTH_TYPE,
                     user_id : signed_in.userid,
                     username : signed_in.username,
                     root : true
@@ -135,7 +141,7 @@ export const handler = async(event) => {
         else{
 
             /// Draft the expected path of the key
-            let key = `${ USERS_PATH_PREFIX }/registered/${ process.env.AUTH_TYPE }/${ signed_in.userid }/key.json`;
+            let key = `${ USERS_PATH_PREFIX }/registered/${ process.env.AUTH_TYPE }/${ signed_in.userid }/user-key.json`;
 
             /// Check if user is registered
             let object = await storage.private.headObject(key);
@@ -154,10 +160,10 @@ export const handler = async(event) => {
             
             /// Otherwise, return success
             else {
-                
                 /// Generate a new token for standard user
                 let generateToken = await session.generate_token({ 
                     payload : new schema.Authentication.Token.Payload({
+                        auth_type : process.env.AUTH_TYPE,
                         user_id : signed_in.userid,
                         username : signed_in.username,
                         root : false

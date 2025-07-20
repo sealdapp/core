@@ -1,5 +1,5 @@
 {
-  "watch": [ "test", "../source" ],  
+  "watch": [ "test", "../source", "lib" ],  
   "ext": "js,mjs,json",         
-  "exec": "echo '' > ../logs/app.log; mocha --require ./test/00_setup.js"      
+  "exec": "echo '=============================' > ../logs/app.log; mocha --timeout 3600000"      
 }

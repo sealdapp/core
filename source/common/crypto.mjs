@@ -1,7 +1,7 @@
 "use strict";
 
 /// Import 3rd party libraries
-import crypto, { subtle } from "crypto";
+import crypto from "crypto";
 
 /// Module scoped variables
 let schema;
@@ -129,5 +129,42 @@ export default class Crypto {
                 })
             }
         }
+    }
+
+    Hash = class {
+
+        static async sha256({ data = "", format = "string", output = "hex" }) {
+            try {
+
+                logger.debug(`Calculating sha256 digest of data. [${ data }]`);
+
+                /// Ensure data is not empty
+                if(validate.String.isEmpty(data).result == true) throw new Error(`Data supplied is empty.`);
+
+                /// Ensure output is supported format
+                if(validate.String.includes(output, [ "hex", "base64" ]).result == false) throw new Error(`Unsupported output format.`)
+
+                /// Handle hash digest calculation based on input format
+                switch(format) {
+                    case "string" : {
+                        return new schema.Crypto.Hash.SHA256({
+                            success : true,
+                            digest : crypto.createHash("sha256").update(data).digest(output),
+                            format : "string"
+                        })
+                    }
+                    default : throw new Error(`Unsupported input format. ${ format }`);
+                }
+            
+            }
+            catch(e) {
+                logger.error(`Failed to get sha256 hash of data. ${ e.stack }`);
+
+                return new schema.Crypto.Hash.SHA256({
+                    error : new Error(e.message)
+                })
+            }
+        }
+        
     }
 }

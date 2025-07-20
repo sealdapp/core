@@ -18,7 +18,7 @@ export default class Storage {
         constructor({ exists = false }) {
             super({ ...arguments[0] });
 
-            this.exists = exists;
+            this.exists = Helper.validate(exists, "boolean");
         }
     }
     
@@ -27,8 +27,12 @@ export default class Storage {
         constructor({ data = null, exists = false }) {
             super({ ...arguments[0] });
 
-            this.data = data;
-            this.exists = exists;
+            this.exists = Helper.validate(exists, "boolean");
+
+            if(this.exists) this.data = Helper.validate(data, "uint8array");
+
+            else this.data = data;
+
         }
     }
 

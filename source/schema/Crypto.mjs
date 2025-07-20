@@ -52,4 +52,22 @@ export default class Crypto {
             }
         }
     }
+
+    static Hash = class {
+        static SHA256 = class extends Crypto.Base {
+            
+            constructor({ digest = null, format = "string" }) {
+                super({ ...arguments[0] });
+
+                if(this.success) {
+
+                    switch(format){
+
+                        default : this.digest = Helper.validate(digest, "string");
+                    }
+
+                }
+            }
+        }
+    }
 }

@@ -43,27 +43,35 @@ export default class Response {
 
     static Keys = class {
 
-        static Get = class extends Response.Base {
+        static Init = class extends Response.Base {
 
-            constructor({ device = null, master = null, root = false }) {
+            constructor({ body = {} }) {
                 super({ ...arguments[0] });
 
-                /// Include master key if requester is root
-                if(root) {
-                    this.body = JSON.stringify({ 
-                        keys : {  device, master },
-                        root : root
-                    });
-                }
-
-                /// Otherwise, return device key only
-                else{
-                    this.body = JSON.stringify({ 
-                        keys : {  device },
-                        root : root
-                    });
-                }
             }
         }
+
+        static Get = class extends Response.Base {
+
+            constructor({ body = {}, device = null, master = null, root = false }) {
+                super({ ...arguments[0] });
+
+                /// Set default body value
+                this.body = body;
+
+                /// Insert root value inside body
+                this.body.root = root;
+                
+                /// Insert device key and master key if root
+                if(root) this.body.keys = { device, master };
+
+                /// Insert device key only if non-root
+                else this.body.keys = { device };
+
+                this.body = JSON.stringify(this.body);
+            }
+        }
+
+
     }
 }

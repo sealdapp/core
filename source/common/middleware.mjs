@@ -59,14 +59,15 @@ export default class Middleware {
                 let payload = jwt.decode(cookies.data.parsed.sessionToken);
 
                 /// Ensure payload contains user_id
-                if(validate.Property.isExistsKeys(payload, [
+                if((await validate.Property.isExistsKeys(payload, [
+                    "auth_type",
                     "user_id",
                     "username",
                     "root",
                     "iat",
                     "exp",
                     "iss"
-                ]).result == false) throw new Error("Malformed token.");
+                ])).result == false) throw new Error("Malformed token.");
 
                 return new schema.Operation({
                     success : true, 

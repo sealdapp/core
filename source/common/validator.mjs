@@ -41,7 +41,7 @@ export default class Validator {
 
                 for(const key of keys) {
 
-                    if(!property.hasOwnProperty(key)) throw new Error(`Key [${ key }] doesn't exists.`)
+                    if(!property.hasOwnProperty(key)) throw new Error(`Key [${ key }] doesn't exists.`);
 
                 }
                 return new schema.Validation({ 
@@ -93,6 +93,22 @@ export default class Validator {
 
                 /// Failure scenarios
                 if(kind != "array") throw new Error("Data is not of array type.");
+
+                /// Success scenarios
+                else return new schema.Validation({ 
+                    success: true, 
+                    result : true 
+                });
+            }
+            catch(e) { return Helper.catcher(e); }
+        }
+
+        static isArrayBuffer(value) {
+            try {
+                let kind = Helper.getKind(value);
+                
+                /// Failure scenarios
+                if(kind != "uint8array") throw new Error("Data is not of uint8array type.");
 
                 /// Success scenarios
                 else return new schema.Validation({ 
@@ -180,6 +196,27 @@ export default class Validator {
                     result : true
                 })
 
+                else return new schema.Validation({
+                    success : true,
+                    result : false
+                })
+            }
+            catch(e) { return Helper.catcher(e); }
+        }
+
+        static includes(value, list) {
+            try {
+
+                /// Ensure data type is string
+                if(Helper.getKind(value) != "string") throw new Error("Value parameter is not of string type.");
+
+                /// Ensure data type is string
+                if(Helper.getKind(list) != "array") throw new Error("Pattern parameter is not of array type.");
+
+                if(list.includes(value)) return new schema.Validation({
+                    success : true,
+                    result : true
+                })
                 else return new schema.Validation({
                     success : true,
                     result : false

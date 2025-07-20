@@ -51,6 +51,42 @@ export default class Utilities {
                 })
             }
         }
+
+        static async bufferToJson(buffer) {
+            try {
+                logger.debug(`Parsing buffer data to json format`);
+
+                /// Ensure data is buffer type
+                if(validate.Type.isArrayBuffer(buffer).result == false) throw new Error(`Data provided is not in buffer format.`);
+
+                /// Convert buffer to string first
+                let string = buffer.toString("utf-8");
+
+                let json;
+                
+                /// Convert string to json
+                try { json = JSON.parse(string); }
+
+                /// Throw string is not a valid json
+                catch(e) { throw new Error(`String is not a valid json data.`) }
+
+                logger.debug(`Successfully converted buffer data to json`);
+
+                return new schema.Operation({
+                    success : true,
+                    data : { json }
+                })
+
+            }
+            catch(e) {
+
+                logger.error(`Failed to convert buffer data to json. ${ e.stack }`);
+
+                return new schema.Operation({
+                    error : new Error(e.message)
+                })
+            }
+        }
     }
 
 }

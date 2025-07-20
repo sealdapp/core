@@ -1,7 +1,7 @@
 "use strict";
 
 /// Import 3rd part libraries
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /// Import application libraries
 import Storages from './interface.mjs';
@@ -26,13 +26,8 @@ export default class Storage extends Storages {
 
         logger.debug("Initializing plugin [s3]")
 
-        /// Validate if s3 bucket is defined
-        if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
-
         /// Validate if s3 region is defined
         if(validate.Property.isExistsKey(process.env, "STORAGE_REGION").result == false) throw new Error("STORAGE_REGION is not defined.");
-
-        this.bucket = process.env.STORAGE_BUCKET_PRIVATE;
 
         /// Initialize s3 client
         this.#client = new S3Client({ region : process.env.STORAGE_REGION })
@@ -125,9 +120,31 @@ export default class Storage extends Storages {
 
             let response = await this.#client.send(command);
 
-            return new schema.Storage.GetObjectCommand({
+            /// Set an empty container for output
+            let output = new Uint8Array(0);
+
+            console.log(response.ContentLength)
+
+            /// Extract output if file has content
+            if(response.ContentLength > 0) {
+
+                logger.debug(`Downloading content...`);
+
+                /// Get output from stream
+                download = await this.#readableStreamToOutput(response.Body);
+
+                /// Ensure download is successful
+                if(download.success == false) throw download.error;
+
+                output = download.data.buffer;
+            }
+
+            console.log(output)
+
+            return new schema.Storage.GetObject({
                 success : true,
-                exists : true
+                exists : true,
+                data : output
             })
 
         }
@@ -157,7 +174,7 @@ export default class Storage extends Storages {
         }
     }
 
-    async putObject(key, body) {
+    async putObject(key, body, options) {
         
         try{
             /// Ensure key exists
@@ -171,7 +188,8 @@ export default class Storage extends Storages {
             const command = new PutObjectCommand({
                 Bucket : this.#bucket,
                 Key : key,
-                Body : body
+                Body : body,
+                ...options
             });
 
             const response = await this.#client.send(command);
@@ -188,5 +206,39 @@ export default class Storage extends Storages {
                 error : new Error(e.message)
             })
         }
+    }
+
+    #readableStreamToOutput(stream) {
+        return new Promise(resolve => {
+            try {
+
+                logger.debug(`Converting readable stream to string.`);
+
+                const chunks = [];
+
+                stream.on('data', chunk => chunks.push(chunk));
+
+                stream.on('error', (e)=> { throw e });
+
+                stream.on('end', () => {
+
+                    /// Always return content in raw buffer format
+                    resolve(new schema.Operation({
+                        success : true,
+                        data : {
+                            buffer : Buffer.concat(chunks)
+                        }
+                    }))
+                });
+            } 
+            catch (e) {
+
+                logger.error(`Failed to convert stream to string. ${ e.stack }}`);
+                
+                resolve(new schema.Operation({
+                    error : new Error(e.message)
+                }))
+            }
+        })
     }
 }

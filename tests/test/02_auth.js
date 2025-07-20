@@ -2,52 +2,24 @@
 
 /// Import required libraries
 import { expect } from "chai";
-import axios from "axios";
+import Setup from "../lib/setup.mjs";
 
 /// Import application module to test
 import { handler as auth_signin } from "../../source/auth_signin.mjs";
 import { handler as auth_verify } from "../../source/auth_verify.mjs";
 
-let TOKEN_ROOT;
-let TOKEN_USER;
-let TOKEN_UNAUTHORIZED;
+let setup = new Setup();
 
-let APP_TOKEN;
+/// Initialize setup
+before(async function() { await setup.init(); })
 
 describe("✅ Authentication - Signin", async function() {
-
-    /// Get jwt token from firebase
-    before(async function() {
-
-        let apiKey = process.env.API_KEY;
-
-        async function getIdToken(email, password) {
-            try {
-                const res = await axios.post(
-                    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-                    {
-                        email,
-                        password,
-                        returnSecureToken: true,
-                    }
-                );
-                return res.data.idToken;
-            } catch (error) {
-                console.error('Error getting token:', error.response?.data || error.message);
-            }
-        }
-
-        TOKEN_ROOT = await getIdToken(process.env.EMAIL1, process.env.PASSW1);
-        TOKEN_USER = await getIdToken(process.env.EMAIL2, process.env.PASSW2);
-        TOKEN_UNAUTHORIZED = await getIdToken(process.env.EMAIL3, process.env.PASSW3);
-        
-    })
 
     it("Should be able to authenticate using root user", async function() {
 
         /// Call module handler
         let response = await auth_signin({
-            body : { oauth_token : TOKEN_ROOT }
+            body : { oauth_token : (await setup.getTokens()).auth.root }
         })
 
         expect(response.statusCode).to.equal(200);
@@ -60,7 +32,7 @@ describe("✅ Authentication - Signin", async function() {
 
         /// Call module handler
         let response = await auth_signin({
-            body : { oauth_token : TOKEN_USER }
+            body : { oauth_token : (await setup.getTokens()).auth.user }
         })
 
         expect(response.statusCode).to.equal(200);
@@ -73,47 +45,21 @@ describe("✅ Authentication - Signin", async function() {
 
 describe("✅ Authentication - Verify", async function() {
 
-    /// Get jwt token from firebase
-    before(async function() {
-
-        let apiKey = process.env.API_KEY;
-
-        async function getIdToken(email, password) {
-            try {
-                const res = await axios.post(
-                    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-                    {
-                        email,
-                        password,
-                        returnSecureToken: true,
-                    }
-                );
-                return res.data.idToken;
-            } catch (error) {
-                console.error('Error getting token:', error.response?.data || error.message);
-            }
-        }
-
-        TOKEN_USER = await getIdToken(process.env.EMAIL2, process.env.PASSW2);
-
-        /// Call module handler
-        let response = await auth_signin({
-            body : { oauth_token : TOKEN_USER }
-        })
-
-        /// Extract session token from cookie
-        const match = response.cookies[0].match(/sessionToken=([^;]+)/);
-        const sessionToken = match ? match[1] : null;
-        
-        APP_TOKEN = sessionToken;
-        
-    })
-
-    it("Should be able to verify a valid token", async function() {
+    it("Should be able to verify a valid root token", async function() {
 
         /// Call module handler
         let response = await auth_verify({
-            cookies : [ `sessionToken=${ APP_TOKEN };` ]
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ]
+        })
+
+        expect(response.isAuthorized).to.equal(true);
+    })
+
+    it("Should be able to verify a valid user token", async function() {
+
+        /// Call module handler
+        let response = await auth_verify({
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.user };` ]
         })
 
         expect(response.isAuthorized).to.equal(true);
@@ -148,7 +94,7 @@ describe("❌ Authentication - Signin", async function() {
 
     it("Should fail if oauth_token is invalid", async function() {
         let response = await auth_signin({
-            body : { oauth_token : process.env.TOKEN_INVALID }
+            body : { oauth_token : (await setup.getTokens()).dummy.invalid }
         })
 
         expect(response.statusCode).to.equal(500)
@@ -157,7 +103,7 @@ describe("❌ Authentication - Signin", async function() {
 
     it("Should fail if token supplied is already expired", async function() {
         let response = await auth_signin({
-            body : { oauth_token : process.env.TOKEN_EXPIRED }
+            body : { oauth_token : (await setup.getTokens()).dummy.expired }
         })
 
         expect(response.statusCode).to.equal(401)
@@ -167,7 +113,7 @@ describe("❌ Authentication - Signin", async function() {
 
     it("Should fail if user is not authorized", async function() {
         let response = await auth_signin({
-            body : { oauth_token : TOKEN_UNAUTHORIZED }
+            body : { oauth_token : (await setup.getTokens()).auth.unauthorized }
         })
 
         expect(response.statusCode).to.equal(403)
@@ -180,7 +126,7 @@ describe("❌ Authentication - Signin", async function() {
         process.env.NODE_ENV="prod";
 
         let response = await auth_signin({
-            body : { oauth_token : TOKEN_UNAUTHORIZED }
+            body : { oauth_token : (await setup.getTokens()).auth.unauthorized }
         })
 
         /// Revert back to dev environment
@@ -235,22 +181,47 @@ describe("❌ Authentication - Verify", async function() {
     it("Should fail if token is invalid", async function() {
 
         let response = await auth_verify({
-            cookies : [ `sessionToken=${ process.env.TOKEN_INVALID };` ]
+            cookies : [ `sessionToken=${ (await setup.getTokens()).dummy.invalid };` ]
         })
 
         expect(response.isAuthorized).to.equal(false)
-        expect(response.context.message).to.equal("Invalid session token.");
+        expect(response.context.message).to.equal("Malformed token.");
     })
 
     it("Should fail if token is expired", async function() {
 
-        let response = await auth_verify({
-            cookies : [ `sessionToken=${ process.env.TOKEN_EXPIRED };` ]
+        /// Decrease session timeout configuration
+        process.env.APP_JWT_TOKEN_EXPIRY = "0s"
+        
+        let APP_TOKEN_USER = await setup.getSessionToken((await setup.getTokens()).auth.user);
+
+        let verified = await auth_verify({
+            cookies : [ `sessionToken=${ APP_TOKEN_USER };` ]
         })
 
-        expect(response.isAuthorized).to.equal(false)
-        expect(response.context.message).to.equal("Invalid session token.");
+        expect(verified.isAuthorized).to.equal(false)
+        expect(verified.context.message).to.equal("Session token expired.");
+
+        /// Rever to original settings
+        await setup.resetEnv();
     })
 
+    it("Should fail if token is signed by different issuer", async function() {
 
+        /// Decrease session timeout configuration
+        process.env.APP_JWT_ISSUER = "wrong-issuer"
+        
+        let APP_TOKEN_USER = await setup.getSessionToken((await setup.getTokens()).auth.user);;
+
+        /// Revert to original settings
+        await setup.resetEnv();
+
+        let verified = await auth_verify({
+            cookies : [ `sessionToken=${ APP_TOKEN_USER };` ]
+        })
+
+        expect(verified.isAuthorized).to.equal(false)
+        expect(verified.context.message).to.equal("Invalid token.");
+
+    })
 })

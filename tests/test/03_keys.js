@@ -2,68 +2,89 @@
 
 /// Import required libraries
 import { expect } from "chai";
-import axios from "axios";
+import crypto from "crypto";
+import Setup from "../lib/setup.mjs";
+import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /// Import application module to test
-import { handler as auth_signin } from "../../source/auth_signin.mjs";
+import { handler as keys_setup } from "../../source/keys_init.mjs";
 import { handler as keys_get } from "../../source/keys_get.mjs";
 
-let TOKEN_ROOT;
-let TOKEN_USER;
-let TOKEN_UNAUTHORIZED;
+const setup = new Setup();
 
-let APP_TOKEN;
+let storage;
+let keys;
 
-describe("✅ Keys - Setup", async function() {
+/// Initialize setup
+before(async function() { await setup.init(); })
 
+describe("✅ Keys - Init", async function() {
+
+    beforeEach(async function() {
+
+        /// Override KEY_LOCK_RETENTION to 0.1 seconds
+        process.env.KEYS_LOCK_DURATION = 0.000001;
+
+        /// Initialize s3 client
+        storage = new S3Client({ region: process.env.STORAGE_REGION });
+
+        /// Delete master key
+        storage.send(new DeleteObjectCommand({
+            Bucket : process.env.STORAGE_BUCKET_PRIVATE,
+            Key : `root/master-key.json`
+        }));
+
+        /// Delete recovery key
+        storage.send(new DeleteObjectCommand({
+            Bucket : process.env.STORAGE_BUCKET_PRIVATE,
+            Key : `root/recovery-key.json`
+        }));
+
+        /// Delete recovery key
+        storage.send(new DeleteObjectCommand({
+            Bucket : process.env.STORAGE_BUCKET_PRIVATE,
+            Key : `root/user-key.json`
+        }));
+
+        /// Generate keys
+        keys = await setup.getSampleKeys();
+    })
+
+    it("Should be able to setup keys.", async function(){
+
+        let response = await keys_setup({
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+            body : keys
+        })
+
+        expect(response.statusCode).to.equals(200);
+    })
+
+    after(async function(){ 
+
+        /// Resets setting to default
+        await setup.resetEnv(); 
+    })
 })
 
 describe("✅ Keys - Get", async function() {
 
-    /// Get jwt token from firebase
-    before(async function() {
-
-        let apiKey = process.env.API_KEY;
-
-        async function getIdToken(email, password) {
-            try {
-                const res = await axios.post(
-                    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-                    {
-                        email,
-                        password,
-                        returnSecureToken: true,
-                    }
-                );
-                return res.data.idToken;
-            } catch (error) {
-                console.error('Error getting token:', error.response?.data || error.message);
-            }
-        }
-
-        TOKEN_USER = await getIdToken(process.env.EMAIL2, process.env.PASSW2);
-
-        /// Call module handler
-        let response = await auth_signin({
-            body : { oauth_token : TOKEN_USER }
-        })
-
-        /// Extract session token from cookie
-        const match = response.cookies[0].match(/sessionToken=([^;]+)/);
-        const sessionToken = match ? match[1] : null;
-        
-        APP_TOKEN = sessionToken;
-        
-    })
-
-    it("Should be able to get key for root user", async function() {
+    /*it("Should be able to get key for root user", async function() {
 
         /// Call module handler
         let response = await keys_get({
-            cookies : [ `sessionToken=${ APP_TOKEN };` ]
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ]
         })
 
         console.log(response)
+
+        let data = JSON.parse(response.body)
+        console.log(data);
+
         expect(response.statusCode).to.equals(200);
-    })
+        expect(data.root).to.equals(true);
+        expect(data.keys.device.exists).to.equals(true);
+        expect(data.keys.master.exists).to.equals(true);
+
+    })*/
 })

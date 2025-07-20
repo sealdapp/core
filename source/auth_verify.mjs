@@ -37,6 +37,9 @@ await (async function init(){
     /// Ensure jwt private key to be used is defined
     if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result == false) throw new Error("SECRET_JWT_PRIVATE not configured");
     
+    /// Validate if s3 bucket is defined
+    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
+    
     /// Load all the plugins for the platform
     let plugins = await platform.load();
 
@@ -82,7 +85,7 @@ export const handler = async(event) => {
 
         /// Ensure verification operation is successful
         if(verify.success == false) return new schema.Response.Auth.Verify({
-            context : { message : "Invalid session token." }
+            context : { message : verify.error.message }
         })
 
         return new schema.Response.Auth.Verify({

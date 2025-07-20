@@ -134,9 +134,24 @@ export default class Session {
         catch(e) {
             logger.debug(`Failed to verify token. ${ e.stack }`);
 
-            return new schema.Operation({
-                error : new Error(e.message)
-            })
+            switch(e.name) {
+                
+                /// Handle expired token. Send signal to client to retry
+                case "TokenExpiredError" : return new schema.Authentication.SignIn({
+                    error : new Error("Session token expired.")
+                });
+
+                /// Handle invalid token
+                case "JsonWebTokenError" : return new schema.Authentication.SignIn({
+                    error : new Error("Token error.")
+                });
+
+                /// Unhandled exceptions
+                default : return new schema.Authentication.SignIn({
+                    error : new Error("Invalid token.")
+                });
+
+            }
         }
     }
 
@@ -291,7 +306,7 @@ const Cache = class {
             keyPair = JSON.parse(keys.data.secret.value)
 
             /// Rotate jwt key if value is not in expected format
-            if(await validate.Property.isExistsKeys(keyPair, [ "private", "public" ]).result == false) {
+            if((await validate.Property.isExistsKeys(keyPair, [ "private", "public" ])).result == false) {
 
                 throw new Error("Keys are not a valid value.");
                 
