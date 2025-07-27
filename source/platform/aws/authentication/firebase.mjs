@@ -50,7 +50,7 @@ export default class Authenticator extends Authenticators {
             logger.debug("Initializing plugin [firebase]")
 
             /// Cache public key from google firebase
-            let firebase_cached = await this.#cache.getKeys("init");
+            const firebase_cached = await this.#cache.getKeys("init");
 
             /// Ensure caching of public key is successful
             if(firebase_cached.success == false) throw firebase_cached.error;
@@ -91,19 +91,19 @@ export default class Authenticator extends Authenticators {
             if(validate.String.isNotEmpty(body.oauth_token).result == false) throw new Error("Invalid oauth_token.");
 
             // Decode token to get the header (for 'kid')
-            let decoded = jwt.decode(body.oauth_token, { complete: true });
+            const decoded = jwt.decode(body.oauth_token, { complete: true });
 
             /// Ensure value is in correct format
             if (!decoded || !decoded.header || !decoded.header.kid) throw new Error('Invalid token structure');
 
             /// Retrieve google's public key from cache
-            let cache_firebase_keys = await this.#cache.getKeys(decoded.header.kid);
+            const cache_firebase_keys = await this.#cache.getKeys(decoded.header.kid);
 
             /// Ensure retrieval from cache is successful
             if(cache_firebase_keys.success == false) throw cache_firebase_keys.error;
 
             /// Otherwise, store actual value
-            let google_cert_pubkey = cache_firebase_keys.data.google_cert_pubkey;
+            const google_cert_pubkey = cache_firebase_keys.data.google_cert_pubkey;
 
             /// Second attempt, throw failure
             if(validate.Property.isExistsKey(google_cert_pubkey, decoded.header.kid).result == false) throw new jwt.TokenExpiredError("Invalid token.");
@@ -131,7 +131,7 @@ export default class Authenticator extends Authenticators {
             logger.debug(`Verifying signin attempt for user [${ decoded.payload.email }]`)
 
             /// Verify the token
-            let payload = jwt.verify(body.oauth_token, google_cert_pubkey[decoded.header.kid], {
+            const payload = jwt.verify(body.oauth_token, google_cert_pubkey[decoded.header.kid], {
                 algorithms: ['RS256'],
                 audience: process.env.AUTH_FIREBASE_PROJECTID,
                 issuer: `${ GOOGLE_TOKEN_URL }/${ process.env.AUTH_FIREBASE_PROJECTID }`
@@ -212,7 +212,7 @@ const Cache = class {
             logger.debug(`Retrieving public key from google firebase.`);
 
             /// Retrieve google firebase public key
-            let response = await fetch.get({ 
+            const response = await fetch.get({ 
                 url : GOOGLE_CERTS_URL
             });
 

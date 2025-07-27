@@ -38,7 +38,7 @@ await (async function init(){
     if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result == false) throw new Error("SECRET_JWT_PRIVATE not configured");
     
     /// Load all the plugins for the platform
-    let plugins = await platform.load();
+    const plugins = await platform.load();
 
     /// Secrets library
     secret = new plugins.Secret(schema, logger, validate);
@@ -71,7 +71,7 @@ export const handler = async(event) => {
         logger.info(`Starting job - Session key rotation.`)
 
         /// Verify token parsed from cookie
-        let rotated = await session.rotate_keys();
+        const rotated = await session.rotate_keys();
 
         /// Ensure verification operation is successful
         if(rotated.success == false) throw rotated.error;

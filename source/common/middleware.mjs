@@ -44,7 +44,7 @@ export default class Middleware {
                 if(validate.Property.isExistsKey(event, "cookies").result == false) throw new Error("Cookie not found.");
 
                 /// Parse cookies
-                let cookies = await utils.Parser.cookies(event.cookies);
+                const cookies = await utils.Parser.cookies(event.cookies);
 
                 /// Ensure parsing of cookies is successful
                 if(cookies.success == false) throw new Error("Invalid cookie.");
@@ -56,18 +56,7 @@ export default class Middleware {
                 if(validate.String.isEmpty(cookies.data.parsed.sessionToken).result == true) throw new Error("Token cannot be empty.");
                 
                 /// Decode token payload
-                let payload = jwt.decode(cookies.data.parsed.sessionToken);
-
-                /// Ensure payload contains user_id
-                if((await validate.Property.isExistsKeys(payload, [
-                    "auth_type",
-                    "user_id",
-                    "username",
-                    "root",
-                    "iat",
-                    "exp",
-                    "iss"
-                ])).result == false) throw new Error("Malformed token.");
+                const payload = jwt.decode(cookies.data.parsed.sessionToken);
 
                 return new schema.Operation({
                     success : true, 
@@ -80,6 +69,35 @@ export default class Middleware {
             catch(e) {
 
                 logger.debug(`Validation failed for session token. ${ e.stack }`);
+
+                return new schema.Operation({
+                    error : new Error(e.message)
+                })
+            }
+        }
+
+        static async body(event){
+            try{
+
+                logger.debug(`Validating body data`);
+
+                /// Ensure event body is supplied
+                if(validate.Property.isExistsKey(event, "body").result == false) {
+                 
+                    logger.error("Body could not be found inside the event.");
+
+                    throw new Error("Bad request.")
+                }
+
+                return new schema.Operation({
+                    success : true,
+                    data : { 
+                        body : event.body
+                    }
+                })
+            }
+            catch(e) {
+                logger.debug(`Validation failed for event body. ${ e.stack }`);
 
                 return new schema.Operation({
                     error : new Error(e.message)

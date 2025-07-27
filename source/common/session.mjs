@@ -1,6 +1,6 @@
 "use strict";
 
-/// Import 3rd part libraries
+/// Import 3rd party libraries
 import jwt from "jsonwebtoken";
 
 /// Module-scoped variables
@@ -41,7 +41,7 @@ export default class Session {
             logger.debug(`Initializing session handler.`);
 
             /// Trigger initial retrieval of keys to force caching
-            let jwt_keys_cached = await this.#cache.getKeys();
+            const jwt_keys_cached = await this.#cache.getKeys();
 
             /// Ensure caching of jwt public key is successful
             if(jwt_keys_cached.success == false) throw jwt_keys_cached.error;
@@ -117,7 +117,7 @@ export default class Session {
             if(secret.success == false) throw secret.error;
 
             /// Verify the token
-            let payload = jwt.verify(token, secret.data.keyPair.value.public, {
+            const payload = jwt.verify(token, secret.data.keyPair.value.public, {
                 algorithms: ['RS256']
             });
 
@@ -162,7 +162,7 @@ export default class Session {
             logger.debug("Rotating JWT session key pair.");
 
             /// Create new RSA key pair
-            let key = await crypto.Create.rsa({
+            const key = await crypto.Create.rsa({
                 extractable : true,
                 usages : ["sign", "verify"]
             });
@@ -171,7 +171,7 @@ export default class Session {
             if(key.success == false) throw key.error;
 
             /// Export private key
-            let privateKey = await crypto.Export.rsa({
+            const privateKey = await crypto.Export.rsa({
                 key : key.privateKey,
                 convert : true,
                 format : "pem"
@@ -181,7 +181,7 @@ export default class Session {
             if(privateKey.success == false) throw privateKey.error;
 
             /// Export public key
-            let publicKey = await crypto.Export.rsa({
+            const publicKey = await crypto.Export.rsa({
                 key : key.publicKey,
                 convert : true,
                 format : "pem"
@@ -191,7 +191,7 @@ export default class Session {
             if(publicKey.success == false) throw publicKey.error;
 
             /// Upload keys to secrets 
-            let uploaded = await secret.set({
+            const uploaded = await secret.set({
                 name : process.env.SECRET_JWT_PRIVATE,
                 value : JSON.stringify({
                     private : privateKey.key,
@@ -233,7 +233,7 @@ const Cache = class {
                 logger.debug("Key pair was not found locally.")
 
                 /// If it doesn't, get jwt keys
-                let retrieved = await this.#downloadJWTKeys();
+                const retrieved = await this.#downloadJWTKeys();
 
                 /// Ensure retrieval of jwt key was successful
                 if(retrieved.success == false) throw retrieved.error;
@@ -253,7 +253,7 @@ const Cache = class {
                     logger.debug("Key pair timestamp mismatch.")
 
                     /// If it doesn't, get jwt keys
-                    let retrieved = await this.#downloadJWTKeys();
+                    const retrieved = await this.#downloadJWTKeys();
 
                     /// Ensure retrieval of jwt key was successful
                     if(retrieved.success == false) throw retrieved.error;
@@ -292,7 +292,7 @@ const Cache = class {
             logger.debug("Downloading jwt private key from parameter store");
             
             /// Retrieve jwt private key
-            let keys = await secret.get({
+            const keys = await secret.get({
                 name : process.env.SECRET_JWT_PRIVATE
             })
 

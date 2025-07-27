@@ -33,7 +33,7 @@ await (async function init(){
     if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
-    let plugins = await platform.load();
+    const plugins = await platform.load();
     
     /// Storage library
     storage.private = new plugins.Storage(schema, logger, validate);
@@ -52,7 +52,7 @@ export const handler = async(event) => {
         logger.debug(`Get key request received.`);
 
         /// Get user information from cookie
-        let token = await middleware.Handler.token(event);
+        const token = await middleware.Handler.token(event);
 
         /// Return bad request if token information extraction failed
         if(token.success == false) return new schema.Response.Keys.Get({
@@ -66,7 +66,7 @@ export const handler = async(event) => {
         if(token.data.decoded.root) {
 
             /// Get master key
-            let master_key = await storage.private.getObject(`root/master-key.json`);
+            const master_key = await storage.private.getObject(`root/master-key.json`);
 
             /// Ensure retrieval of master key is successful
             if(master_key.success == false) throw master_key.error;
@@ -82,7 +82,7 @@ export const handler = async(event) => {
 
 
             /// Get root device key
-            let root_key = await storage.private.getObject(`root/user-key.json`);
+            const root_key = await storage.private.getObject(`root/user-key.json`);
 
             /// Ensure retrieval of rootkey is successful
             if(root_key.success == false) throw root_key.error;
@@ -96,7 +96,7 @@ export const handler = async(event) => {
             })
 
             /// Parse root device key if it exists
-            let key_value_root = await utils.Parser.bufferToJson(root_key.data);
+            const key_value_root = await utils.Parser.bufferToJson(root_key.data);
 
             /// Ensure parsing of root key value is successful
             if(key_value_root.success == false) throw key_value_root.error;
@@ -114,7 +114,7 @@ export const handler = async(event) => {
         else{
 
             /// Get user device key
-            let user_key = await storage.private.getObject(`users/registered/${ token.data.decoded.auth_type }/${ token.data.decoded.user_id }/user-key.json`);
+            const user_key = await storage.private.getObject(`users/registered/${ token.data.decoded.auth_type }/${ token.data.decoded.user_id }/user-key.json`);
 
             /// Ensure retrieval of user key is successful
             if(user_key.success == false) throw user_key.error;
@@ -127,7 +127,7 @@ export const handler = async(event) => {
             });
             
             /// Convert user key data into json format for transmission
-            let key_value = await utils.Parser.bufferToJson(user_key.data)
+            const key_value = await utils.Parser.bufferToJson(user_key.data)
 
             /// Ensure conversion is successful
             if(key_value.success == false) throw key_value.error;

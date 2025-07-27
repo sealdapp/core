@@ -60,7 +60,7 @@ export default class Secret extends Secrets {
             const response = await this.#client.send(command);
 
             /// Create a new secret instance
-            let secret = new schema.Secret({
+            const secret = new schema.Secret({
                 name : name,
                 value : response.Parameter.Value,
                 exists : true,
@@ -106,7 +106,7 @@ export default class Secret extends Secrets {
             
             logger.debug(`Checking if secret [${ name }] exists before doing an update.`)
             /// Get current value of the secret
-            let exists = await this.get({ 
+            const exists = await this.get({ 
                 name : name
              });
              

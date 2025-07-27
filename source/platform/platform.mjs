@@ -51,7 +51,7 @@ export default class Platform {
 
         logger.debug("Invoking initialize platform.");
 
-        let init = await this.platform.init();
+        const init = await this.platform.init();
 
         if(init.success == false) throw new Error(`Failed to load platform. ${ init.error.stack }`)
         

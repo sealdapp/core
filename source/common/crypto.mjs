@@ -32,7 +32,7 @@ export default class Crypto {
 
                 logger.debug("Creating new RSA key pair");
 
-                let pair = await crypto.webcrypto.subtle.generateKey(
+                const pair = await crypto.webcrypto.subtle.generateKey(
                     {
                         name: RSA_NAME,
                         modulusLength: RSA_MODLEN,
@@ -85,7 +85,7 @@ export default class Crypto {
 
                 logger.debug(`Detected export request for ${ key.type } key. Setting key format structure to [${ structure }]`)
 
-                let exported = await crypto.webcrypto.subtle.exportKey(structure, key);
+                const exported = await crypto.webcrypto.subtle.exportKey(structure, key);
 
                 if (format === "raw"){
 
@@ -108,7 +108,7 @@ export default class Crypto {
                     const header = key.type === 'private' ? 'PRIVATE KEY' : 'PUBLIC KEY';
 
                     /// Concatenate contents
-                    let content = `-----BEGIN ${ header }-----\n${ body }\n-----END ${ header }-----`;
+                    const content = `-----BEGIN ${ header }-----\n${ body }\n-----END ${ header }-----`;
 
                     logger.debug(`Successfully converted exported key into PEM format`);
 

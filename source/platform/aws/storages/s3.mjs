@@ -72,7 +72,7 @@ export default class Storage extends Storages {
                 Key : key
             })
 
-            let response = await this.#client.send(command);
+            const response = await this.#client.send(command);
 
             return new schema.Storage.HeadObject({
                 success : true,
@@ -118,12 +118,10 @@ export default class Storage extends Storages {
                 Key : key
             })
 
-            let response = await this.#client.send(command);
+            const response = await this.#client.send(command);
 
             /// Set an empty container for output
-            let output = new Uint8Array(0);
-
-            console.log(response.ContentLength)
+            const output = new Uint8Array(0);
 
             /// Extract output if file has content
             if(response.ContentLength > 0) {
@@ -131,7 +129,7 @@ export default class Storage extends Storages {
                 logger.debug(`Downloading content...`);
 
                 /// Get output from stream
-                download = await this.#readableStreamToOutput(response.Body);
+                const download = await this.#readableStreamToOutput(response.Body);
 
                 /// Ensure download is successful
                 if(download.success == false) throw download.error;

@@ -15,6 +15,7 @@ before(async function() { await setup.init(); })
 
 describe("✅ Authentication - Signin", async function() {
 
+
     it("Should be able to authenticate using root user", async function() {
 
         /// Call module handler
@@ -79,7 +80,7 @@ describe("❌ Authentication - Signin", async function() {
             body : {}
         })
 
-        expect(response.statusCode).to.equal(500)
+        expect(response.statusCode).to.equal(400)
         expect(JSON.parse(response.body).message).to.equal("Missing oauth_token.")
     })
 
@@ -88,8 +89,8 @@ describe("❌ Authentication - Signin", async function() {
             body : { oauth_token : "" }
         })
 
-        expect(response.statusCode).to.equal(500)
-        expect(JSON.parse(response.body).message).to.equal("Invalid oauth_token.")
+        expect(response.statusCode).to.equal(400)
+        expect(JSON.parse(response.body).message).to.contains("Invalid oauth_token.")
     })
 
     it("Should fail if oauth_token is invalid", async function() {
@@ -97,7 +98,7 @@ describe("❌ Authentication - Signin", async function() {
             body : { oauth_token : (await setup.getTokens()).dummy.invalid }
         })
 
-        expect(response.statusCode).to.equal(500)
+        expect(response.statusCode).to.equal(400)
         expect(JSON.parse(response.body).message).to.equal("Invalid token structure")
     })
 
@@ -132,7 +133,7 @@ describe("❌ Authentication - Signin", async function() {
         /// Revert back to dev environment
         process.env.NODE_ENV="dev";
 
-        expect(response.statusCode).to.equal(500)
+        expect(response.statusCode).to.equal(400)
         expect(JSON.parse(response.body).message).to.equal("Email is not verified.")
 
     })

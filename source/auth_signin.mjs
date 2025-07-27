@@ -45,7 +45,7 @@ await (async function init(){
     if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
-    let plugins = await platform.load();
+    const plugins = await platform.load();
 
     /// Secrets library
     secret = new plugins.Secret(schema, logger, validate);
@@ -92,10 +92,15 @@ export const handler = async(event) => {
         })
 
         /// Pass event body to authenticator signin method
-        let signed_in = await auth.signin(event.body);
+        const signed_in = await auth.signin(event.body);
 
         /// Handle exceptions
-        if(signed_in.success == false) throw signed_in.error;
+        if(signed_in.success == false) return new schema.Response.Auth.Signin({
+            statusCode : 400,
+            body : {
+                message : signed_in.error.message
+            }
+        });
         
         /// Handle invalid authentications
         if(signed_in.authenticated == false) return new schema.Response.Auth.Signin({
@@ -111,7 +116,7 @@ export const handler = async(event) => {
         if(process.env.ROOT_USER.toLowerCase() === signed_in.username) {
 
             /// Skip authorization check if the user logged in is the root user
-            let generateToken = await session.generate_token({ 
+            const generateToken = await session.generate_token({ 
                 payload : new schema.Authentication.Token.Payload({
                     auth_type : process.env.AUTH_TYPE,
                     user_id : signed_in.userid,
@@ -141,10 +146,10 @@ export const handler = async(event) => {
         else{
 
             /// Draft the expected path of the key
-            let key = `${ USERS_PATH_PREFIX }/registered/${ process.env.AUTH_TYPE }/${ signed_in.userid }/user-key.json`;
+            const key = `${ USERS_PATH_PREFIX }/registered/${ process.env.AUTH_TYPE }/${ signed_in.userid }/user-key.json`;
 
             /// Check if user is registered
-            let object = await storage.private.headObject(key);
+            const object = await storage.private.headObject(key);
             
             /// Ensure operation is successful
             if(object.success == false) throw object.error;
@@ -161,7 +166,7 @@ export const handler = async(event) => {
             /// Otherwise, return success
             else {
                 /// Generate a new token for standard user
-                let generateToken = await session.generate_token({ 
+                const generateToken = await session.generate_token({ 
                     payload : new schema.Authentication.Token.Payload({
                         auth_type : process.env.AUTH_TYPE,
                         user_id : signed_in.userid,

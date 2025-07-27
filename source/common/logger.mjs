@@ -15,7 +15,7 @@ export default class Logger {
         path = __path;
 
         /// Custom format to include file name and line number
-        let logFormat = Winston.format.printf(({ timestamp, level, path, message }) => {
+        const logFormat = Winston.format.printf(({ timestamp, level, path, message }) => {
             
             /// Structure the format of the logs
             return `${ timestamp } [${ level.toUpperCase() }] [${ path }]: ${ message }`;

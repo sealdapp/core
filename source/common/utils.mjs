@@ -60,7 +60,7 @@ export default class Utilities {
                 if(validate.Type.isArrayBuffer(buffer).result == false) throw new Error(`Data provided is not in buffer format.`);
 
                 /// Convert buffer to string first
-                let string = buffer.toString("utf-8");
+                const string = buffer.toString("utf-8");
 
                 let json;
                 

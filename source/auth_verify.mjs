@@ -16,7 +16,7 @@ import Platform from "./platform/platform.mjs";
 /// Initialize libraries
 const logger = new Logger(path); 
 const schema = new Schema();
-const validate = new Validator(schema, logger);
+const validate = new Validator();
 const utils = new Utilities(schema, logger, validate);
 const middleware = new Middleware(schema, logger, validate, utils);
 const crypto = new Crypto(schema, logger, validate);
@@ -41,7 +41,7 @@ await (async function init(){
     if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
-    let plugins = await platform.load();
+    const plugins = await platform.load();
 
     /// Secrets library
     secret = new plugins.Secret(schema, logger, validate);
@@ -71,17 +71,33 @@ export const handler = async(event) => {
 
     try {
 
-        logger.info(`Verifying authentication.`)
-        
-        /// Extract token from cookie
-        let token = await middleware.Handler.token(event);
+        logger.info(`Verifying authentication.`);
 
-        if(token.success == false) return new schema.Response.Auth.Verify({
-            context : { message : token.error.message }
+        let token;
+
+        /// Extract token from cookie
+        const parse_token = await middleware.Handler.token(event);
+
+        if(parse_token.success == false) return new schema.Response.Auth.Verify({
+            context : { message : parse_token.error.message }
         })
 
+        try {
+            logger.debug("Trying to construct token...");
+
+            /// Construct token data
+            token = new schema.Request.Token(parse_token.data.decoded)
+        }
+        catch(e) {
+            
+            logger.error(`Failed to construct token. ${ e.stack }`);
+
+            /// Otherwise, throw malformed token error
+            throw new Error("Malformed token.");
+        }
+
         /// Verify token parsed from cookie
-        let verify = await session.verify_token({ token : token.data.parsed });
+        const verify = await session.verify_token({ token : parse_token.data.parsed });
 
         /// Ensure verification operation is successful
         if(verify.success == false) return new schema.Response.Auth.Verify({

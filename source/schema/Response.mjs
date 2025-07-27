@@ -45,7 +45,7 @@ export default class Response {
 
         static Init = class extends Response.Base {
 
-            constructor({ body = {} }) {
+            constructor({ }) {
                 super({ ...arguments[0] });
 
             }

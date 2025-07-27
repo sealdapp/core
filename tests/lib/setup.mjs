@@ -3,7 +3,7 @@
 /// 3rd party modules
 import dotenv from "dotenv";
 import axios from "axios";
-import crypto from "crypto";
+import crypto, { pbkdf2 } from "crypto";
 
 let env_files = [ 
     '../dev/.env.common',
@@ -101,37 +101,42 @@ export default class Setup {
         }
     }
 
+
     async getSampleKeys() {
-
-        /// Generate random password
-        const password = crypto.randomBytes(8).toString('hex'); 
-
-        /// Generate random salt for password
-        const password_salt = crypto.getRandomValues(new Uint8Array(16));
-
-        /// Generate recovery key
-        const recovery = crypto.randomBytes(16).toString('hex'); 
-
-        /// Generate random salt for password
-        const recovery_salt = crypto.getRandomValues(new Uint8Array(16));
 
         /// Generate master key
         const master = await crypto.subtle.generateKey(
             {
-                name: 'AES-GCM',
-                length: 256,
+                name: 'RSA-OAEP',
+                modulusLength: 4096,
+                publicExponent: new Uint8Array([ 1, 0, 1 ]), // 65537
+                hash: "SHA-256",
             },
             true,
-            ['encrypt', 'decrypt']
+            [ 'encrypt', 'decrypt' ]
         );
+        
+        /// Export master public key
+        const master_public = Buffer.from(await crypto.subtle.exportKey("spki", master.publicKey)).toString("base64");
+
+        /// Generate a random IV value
+        const master_password_iv = crypto.getRandomValues(new Uint8Array(12));
+
+
+
+        /// Generate random password
+        const password = crypto.randomBytes(10).toString('hex'); 
+
+        /// Generate random salt for password
+        const password_salt = crypto.getRandomValues(new Uint8Array(16));
 
         /// Import password key material
         const password_km = await crypto.subtle.importKey(
             'raw',
             (new TextEncoder()).encode(password),
-            'PBKDF2',
+            { name : "PBKDF2"},
             false,
-            ['deriveKey']
+            [ 'deriveKey' ]
         );
         
         /// Derive wrapping key from password key
@@ -144,21 +149,49 @@ export default class Setup {
             },
             password_km,
             {
-                name: 'AES-KW',
+                name: 'AES-GCM',
                 length: 256,
             },
             true,
-            ['wrapKey', 'unwrapKey']
+            [ 'encrypt', 'decrypt' ]
         );
 
+
+        /// Generate device secret
+        const device_secret = await crypto.subtle.generateKey(
+            {
+                name: "AES-GCM",
+                length: 256
+            },
+            true, // extractable
+            ["encrypt", "decrypt"]
+        );
+
+        /// Generate a random IV value
+        const device_secret_iv = crypto.getRandomValues(new Uint8Array(12));
+
+
         /// Wrap master key using wrapping key derived from password key
-        const master_password_wrapped = Buffer.from(await crypto.subtle.wrapKey(
-            'jwk',         // format of key to wrap
-            master,     // key to be wrapped
-            password_wk,   // wrapping key
-            'AES-KW'       // wrapping algorithm
+        const master_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: master_password_iv },
+            device_secret,   
+            await crypto.subtle.exportKey("pkcs8", master.privateKey)
         )).toString("base64");
 
+        /// Wrap device secret using derived password
+        const device_secret_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: device_secret_iv },
+            password_wk,   
+            await crypto.subtle.exportKey("raw", device_secret)
+        )).toString("base64");
+
+
+        /// Generate recovery key
+        const recovery = crypto.randomBytes(16).toString('hex'); 
+
+        /// Generate random salt for password
+        const recovery_salt = crypto.getRandomValues(new Uint8Array(16));
+        
         /// Import recovery key material
         const recovery_km = await crypto.subtle.importKey(
             'raw',
@@ -178,39 +211,201 @@ export default class Setup {
             },
             recovery_km,
             {
-                name: 'AES-KW',
+                name: 'AES-GCM',
                 length: 256,
             },
             true,
-            ['wrapKey', 'unwrapKey']
+            [ 'encrypt', 'decrypt' ]
         );
 
+        /// Generate a random IV value
+        const master_recovery_iv = crypto.getRandomValues(new Uint8Array(12));
+
         /// Wrap master key using wrapping key derived from recovery key
-        const master_recovery_wrapped = Buffer.from(await crypto.subtle.wrapKey(
-            'jwk',         // format of key to wrap
-            master,     // key to be wrapped
-            recovery_wk,   // wrapping key
-            'AES-KW'       // wrapping algorithm
+        const master_recovery_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: master_recovery_iv },
+            recovery_wk,   
+            await crypto.subtle.exportKey("pkcs8", master.privateKey)
+        )).toString("base64");
+
+
+
+
+        /** OTHER Device key */
+        const device_ecdh = await crypto.subtle.generateKey(
+            {
+                name: "ECDH",
+                namedCurve: "P-256", 
+            },
+            true, // extractable
+            [ "deriveKey", "deriveBits" ]
+        );
+        /// Generate a random IV value
+        const device_ecdh_iv = crypto.getRandomValues(new Uint8Array(12));
+
+        /// Export device ecdh public key into base64 format
+        const device_ecdh_public = Buffer.from(await crypto.subtle.exportKey("raw", device_ecdh.publicKey)).toString("base64");
+
+        /// Wrap device ecnd private key using aes key derived from user password
+        const device_ecdh_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: device_ecdh_iv },
+            password_wk,   
+            await crypto.subtle.exportKey("pkcs8", device_ecdh.privateKey)
+        )).toString("base64");
+
+        
+        const device_ecdsa = await crypto.subtle.generateKey(
+            {
+                name: "ECDSA",
+                namedCurve: "P-256", // Also valid: P-384, P-521
+            },
+            true,
+            ["sign", "verify"]
+        );
+
+        /// Generate a random IV value
+        const device_ecdsa_iv = crypto.getRandomValues(new Uint8Array(12));
+
+        /// Export device ecdh public key into base64 format
+        const device_ecdsa_public = Buffer.from(await crypto.subtle.exportKey("raw", device_ecdsa.publicKey)).toString("base64");
+
+
+        /// Wrap device ecnd private key using aes key derived from user password
+        const device_ecdsa_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: device_ecdsa_iv },
+            password_wk,   
+            await crypto.subtle.exportKey("pkcs8", device_ecdsa.privateKey)
         )).toString("base64");
 
         return {
+
             master_key : {
-                type : "wrappedJWK",
-                wrappedKey : master_password_wrapped,
-                algorithm : "AES-KW"
+                info : {
+                    type : "masterKey",
+                    version : 1,
+                    timestamp : Date.now()
+                },
+                keys : {
+                    rsa : {
+                        publicKey : {
+                            algorithm : {
+                                name : master.publicKey.algorithm.name,
+                                modulusLength : master.publicKey.algorithm.modulusLength,
+                                hash : master.publicKey.algorithm.hash
+                            },
+                            usages : master.publicKey.usages,
+                            value : master_public
+                        },
+                        privateKey : {
+                            algorithm : {
+                                name : master.publicKey.algorithm.name,
+                                modulusLength : master.publicKey.algorithm.modulusLength,
+                                hash : master.publicKey.algorithm.hash
+                            },
+                            usages : master.privateKey.usages,
+                            value : master_wrapped,
+                            iv : Buffer.from(master_password_iv).toString("base64"),
+                            wrapper : "root.deviceKey.aes"
+                        }
+                    }
+                }
             },
+
             recovery_key : {
-                type : "wrappedJWK",
-                wrappedKey : master_recovery_wrapped,
-                algorithm : "AES-KW"
+                info : {
+                    type : "recoveryKey",
+                    version : 1,
+                    timestamp : Date.now()
+                },
+                keys : {
+                    aes : {
+                        value : master_recovery_wrapped,
+                        iv : Buffer.from(master_recovery_iv).toString("base64"),
+                        wrapper : "this.recoveryKey.pbkdf2"
+                    },
+                    pbkdf2 : {
+                        algorithm : {
+                            name: 'PBKDF2',
+                            salt : Buffer.from(recovery_salt).toString("base64"),
+                            iterations: 100_000,
+                            hash: 'SHA-256'
+                        },
+                        derivedAlgorithm : {
+                            name : recovery_wk.algorithm.name,
+                            length : recovery_wk.algorithm.length
+                        },
+                        usages : recovery_wk.usages,
+                    }
+                }
             },
+            
             root_key : {
-                type : "deviceKey",
-                salt : Buffer.from(password_salt).toString("base64"),
-                iterations : 100_000,
-                hash : 'SHA-256',
-                algorithm : "AES-KW",
-                length : 256
+                info : {
+                    type : "userKey",
+                    version : 1,
+                    timestamp : Date.now()
+                },
+                keys : {
+                    aes : {
+                        value : device_secret_wrapped,
+                        iv : Buffer.from(device_secret_iv).toString("base64"),
+                        wrapper : "this.userKey.pbkdf2"
+                    },
+                    ecdh : {
+                        publicKey : {
+                            algorithm : {
+                                name : device_ecdh.publicKey.algorithm.name,
+                                namedCurve : device_ecdh.publicKey.algorithm.namedCurve
+                            },
+                            usages : device_ecdh.publicKey.usages,
+                            value : device_ecdh_public
+                        },
+                        privateKey : {
+                            algorithm : {
+                                name : device_ecdh.privateKey.algorithm.name,
+                                namedCurve : device_ecdh.privateKey.algorithm.namedCurve
+                            },
+                            usages : device_ecdh.privateKey.usages,
+                            value : device_ecdh_private_wrapped,
+                            iv : Buffer.from(device_ecdh_iv).toString("base64"),
+                            wrapper : "this.userKey.pbkdf2"
+                        }
+                    },
+                    ecdsa : {
+                        publicKey : {
+                            algorithm : {
+                                name : device_ecdsa.publicKey.algorithm.name,
+                                namedCurve : device_ecdsa.publicKey.algorithm.namedCurve
+                            },
+                            usages : device_ecdsa.publicKey.usages,
+                            value : device_ecdsa_public
+                        },
+                        privateKey : {
+                            algorithm : {
+                                name : device_ecdsa.privateKey.algorithm.name,
+                                namedCurve : device_ecdsa.privateKey.algorithm.namedCurve
+                            },
+                            usages : device_ecdsa.privateKey.usages,
+                            value : device_ecdsa_private_wrapped,
+                            iv : Buffer.from(device_ecdsa_iv).toString("base64"),
+                            wrapper : "this.userKey.pbkdf2"
+                        }
+
+                    },
+                    pbkdf2 : {
+                        algorithm : {
+                            name: 'PBKDF2',
+                            salt : Buffer.from(password_salt).toString("base64"),
+                            iterations: 100_000,
+                            hash: 'SHA-256'
+                        },
+                        derivedAlgorithm : {
+                            name : recovery_wk.algorithm.name,
+                            length : recovery_wk.algorithm.length
+                        },
+                        usages : recovery_wk.usages
+                    }
+                }
             }
         }
     }

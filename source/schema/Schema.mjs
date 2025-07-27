@@ -3,6 +3,7 @@
 /// Import all Schema classes
 import Operation from "./Operation.mjs";
 import Validation from "./Validation.mjs";
+import Request from "./Request.mjs";
 import Response from "./Response.mjs";
 import Fetch from "./Fetch.mjs";
 import Crypto from "./Crypto.mjs";
@@ -17,6 +18,7 @@ export default class Schema {
     constructor(){
         this.Operation = Operation;
         this.Validation = Validation;
+        this.Request = Request;
         this.Response = Response;
         this.Fetch = Fetch;
         this.Crypto = Crypto;

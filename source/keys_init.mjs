@@ -11,12 +11,11 @@ import Utilities from "./common/utils.mjs";
 import Middleware from "./common/middleware.mjs";
 import Crypto from "./common/crypto.mjs";
 import Platform from "./platform/platform.mjs";
-import { ObjectLockMode } from '@aws-sdk/client-s3';
 
 /// Initialize libraries
 const logger = new Logger(path); 
 const schema = new Schema();
-const validate = new Validator(schema, logger);
+const validate = new Validator();
 const utils = new Utilities(schema, logger, validate);
 const middleware = new Middleware(schema, logger, validate, utils);
 const crypto = new Crypto(schema, logger, validate);
@@ -36,7 +35,7 @@ await (async function init(){
     if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
-    let plugins = await platform.load();
+    const plugins = await platform.load();
     
     /// Storage library
     storage.private = new plugins.Storage(schema, logger, validate);
@@ -48,27 +47,72 @@ await (async function init(){
 
 })()
 
-async function validateWrappedJWK(key) {
+async function loadKey(key, metadata) {
 
     try {
-        logger.debug(`Validating wrapped JWK key.`);
+        logger.debug(`Validating key.`);
 
-        /// Ensure keys contain mandatory parameters
-        if(validate.Property.isExistsKeys(key, [
-            "type",
-            "wrappedKey",
-            "algorithm"
-        ]).result == false) throw new Error(`One or more mandatory property is missing.`);
+        /// Ensure expected top level properties exists
+        if((await validate.Property.isExistsKeys(key, [
+            "info",
+            "keys"
+        ])).result == false) throw new Error(`One or more mandatory property is missing.`);
 
-        /// Ensure type is wrappedJWK
-        if(key.type != "wrappedJWK") throw new Error(`Key type is not wrappedJWK`);
+        /// Ensure key type is inside info
+        if(validate.Property.isExistsKey(key.info, "type").result == false) throw new Error(`Unkown key type.`);
 
-        /// Ensure wrapped key contains value
-        if(validate.String.isEmpty(key.wrappedKey).result == true) throw new Error(`WrappedKey is empty.`);
+        let keyTypes = [];
 
-        /// Get sha256 digest of data
-        let hash = await crypto.Hash.sha256({ 
-            data : JSON.stringify(key),
+        switch(key.info.type) {
+
+            /// Set expected key types for master key
+            case "masterKey" : keyTypes = [ "rsa" ]; break;
+
+            /// Set expected key types for recovery key
+            case "recoveryKey" : keyTypes = [ "aes", "pbkdf2" ]; break;
+            
+            /// Set expected key types for user key
+            case "userKey" : keyTypes = [ "aes", "ecdh", "ecdsa", "pbkdf2" ]; break;
+
+            /// Throw error if key type is not supported
+            default : throw new Error(`Unkown key type.`);
+        }   
+
+        /// Ensure expected types are inside the keys
+        if((await validate.Property.isExistsKeys(key.keys, keyTypes)).result == false) throw new Error("One or more mandatory property of keys is missing");
+        
+        const keyData = { 
+            info : key.info,
+            keys : key.keys,
+            metadata : {
+                issuer : metadata.username,
+                issuedFor : metadata.iss,
+                root : metadata.root
+            }
+        };
+
+        let keyObject;
+
+        switch(key.info.type) {
+
+            /// Set expected key types for master key
+            case "masterKey" :  keyObject = new schema.Keys.Master(keyData); break;
+
+            /// Set expected key types for recovery key
+            case "recoveryKey" :  keyObject = new schema.Keys.Recovery(keyData); break;
+            
+            /// Set expected key types for user key
+            case "userKey" :  keyObject = new schema.Keys.User(keyData); break;
+
+            /// Throw error if key type is not supported
+            default : throw new Error(`Unkown key type.`);
+        }   
+
+        const stringified = JSON.stringify(keyObject);
+
+        /// Get sha256 digest of data to be used for uploading
+        const hash = await crypto.Hash.sha256({ 
+            data : stringified,
             output : "base64"
         })
 
@@ -78,52 +122,13 @@ async function validateWrappedJWK(key) {
         return new schema.Operation({
             success : true,
             data : { 
-                content : key,
+                content : stringified,
                 digest : hash.digest
             }
         })
-
     }
     catch(e) {
-        logger.error(`Failed to validate wrapped JWK key. ${ e.stack }`);
-
-        return new schema.Operation({
-            error : new Error(e.message)
-        })
-    }
-}
-
-async function validateDeviceKey(key) {
-
-    try {
-
-        logger.debug(`Validating device key.`);
-
-        /// Ensure keys contain mandatory parameters
-        if(validate.Property.isExistsKeys(key, [
-            "type",
-            "salt",
-            "iterations",
-            "hash",
-            "algorithm",
-            "length"
-        ]).result == false) throw new Error(`One or more mandatory property is missing.`);
-
-        /// Ensure type is device key
-        if(key.type != "deviceKey") throw new Error(`Key type is not deviceKey`);
-
-        /// Ensure salt value is not empty
-        if(validate.String.isEmpty(key.salt).result == true) throw new Error(`Salt is empty.`);
-
-        return new schema.Operation({
-            success : true,
-            data : { key }
-        })
-
-
-    }
-    catch(e) {
-        logger.error(`Failed to validate device key. ${ e.stack }`);
+        logger.error(`Failed to load key. ${ e.stack }`);
 
         return new schema.Operation({
             error : new Error(e.message)
@@ -137,93 +142,119 @@ export const handler = async(event) => {
 
         logger.info(`Setting up keys.`);
 
+        let token;
+        let body;
+
         /// Get user information from cookie
-        let token = await middleware.Handler.token(event);
+        const parse_token = await middleware.Handler.token(event);
 
         /// Return bad request if token information extraction failed
-        if(token.success == false) return new schema.Response.Keys.Get({
+        if(parse_token.success == false) return new schema.Response.Keys.Init({
             statusCode : 400,
             body : {
                 message : "Bad request"
             }
         })
 
+        /// Construct token. Validation skipped since it was already validated by authverify
+        token = new schema.Request.Token(parse_token.data.decoded)
+
         /// Ensure user is root
-        if(token.data.decoded.root == false) throw new schema.Response.Keys.Setup({
+        if(token.root == false) return new schema.Response.Keys.Init({
             statusCode : 401,
             body : { message : "You are not authorized." }
         })
 
-        /// Get master key
-        let master_key = await storage.private.getObject(`root/master-key.json`);
+        /// Ensure request body is correct
+        const parse_body = await middleware.Handler.body(event);
 
-        /// Ensuer master key retrieval is successful
+        /// Return bad request if body data extraction failed
+        if(parse_body.success == false) return new schema.Response.Keys.Init({
+            statusCode : 400,
+            body : { message : parse_body.error.message }
+        })
+
+        /// Construct body according to the expecte request schema for this function
+        try { body = new schema.Request.Keys.Init(parse_body.data.body) }
+
+        /// Return if body is malformed
+        catch(e) { 
+            logger.error(`Failed to construct body data. ${ e.stack }`);
+
+            return new schema.Response.Keys.Init({
+                statusCode : 400,
+                body : { message : e.message }
+            })
+        }
+
+        /// Get master key
+        const master_key = await storage.private.headObject(`root/master-key.json`);
+
+        /// Ensure master key retrieval is successful
         if(master_key.success == false) throw master_key.error;
 
         /// Ensure master key doesn't exists yet
-        if(master_key.exists == true) return new schema.Response.Keys.Setup({
+        if(master_key.exists == true) return new schema.Response.Keys.Init({
             statusCode : 409,
             body : { message : "Master key already exists." }
         })
 
-        /// Ensure event body is supplied
-        if(validate.Property.isExistsKey(event, "body").result == false) return new schema.Response.Keys.Setup({
+        logger.info("There is no master key detected. Proceeding with key initialization setup");
+        
+        /// Validate master key
+        const wrapped_master = await loadKey(body.master_key, token);
+
+        /// Ensure wrapped_master file is valid
+        if(wrapped_master.success == false) return new schema.Response.Keys.Init({
             statusCode : 400,
-            body : { message : "Bad request." }
+            body : { message : "Master key supplied is malformed." }
         })
-
-        /// Ensure master key is supplied
-        if(validate.Property.isExistsKey(event.body, "master_key").result == false) return new schema.Response.Keys.Setup({
-            statusCode : 400,
-            body : { message : "Missing master_key." }
-        })
-
-        /// Ensure recovery key is supplied
-        if(validate.Property.isExistsKey(event.body, "recovery_key").result == false) return new schema.Response.Keys.Setup({
-            statusCode : 400,
-            body : { message : "Missing recover_key." }
-        })
-
-        /// Ensure root device key is supplied
-        if(validate.Property.isExistsKey(event.body, "root_key").result == false) return new schema.Response.Keys.Setup({
-            statusCode : 400,
-            body : { message : "Missing root_key." }
-        })
-
-        /// Validate root device key
-        let root_key = await validateDeviceKey(event.body.root_key);
-
-        /// Ensure root device key file is valid
-        if(root_key.success == false) throw root_key.error;
-
-        /// Store root device key
-        let root_key_upload = await storage.private.putObject(`root/user-key.json`, JSON.stringify(root_key.data));
-
-        /// Ensure root device key upload is successful
-        if(root_key_upload.success == false) throw root_key_upload.error;
 
         /// Validate recovery key
-        let wrapped_recovery = await validateWrappedJWK(event.body.recovery_key);
+        const wrapped_recovery = await loadKey(body.recovery_key, token);
 
         /// Ensure wrapped_recovery file is valid
-        if(wrapped_recovery.success == false) throw wrapped_recovery.error;
+        if(wrapped_recovery.success == false) return new schema.Response.Keys.Init({
+            statusCode : 400,
+            body : { message : "Recovery key supplied is malformed." }
+        })
+
+        /// Validate root user key
+        const root_key = await loadKey(body.root_key, token);
+
+        /// Ensure root user key file is valid
+        if(root_key.success == false) return new schema.Response.Keys.Init({
+            statusCode : 400,
+            body : { message : "Root user key supplied is malformed." }
+        })
+
+        logger.info("All keys supplied are valid. Proceeding with the upload.");
+
+        /// Store root user key
+        const root_key_upload = await storage.private.putObject(`root/user-key.json`, root_key.data.content);
+
+        /// Ensure root user key upload is successful
+        if(root_key_upload.success == false) throw root_key_upload.error;
 
         /// Store recovery key 
-        let wrapped_recovery_upload = await storage.private.putObject(`root/recovery-key.json`, JSON.stringify(wrapped_recovery.data));
+        const wrapped_recovery_upload = await storage.private.putObject(
+            `root/recovery-key.json`, 
+            wrapped_recovery.data.content,
+            {
+                ObjectLockMode: "GOVERNANCE",
+                ObjectLockRetainUntilDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * process.env.KEYS_LOCK_DURATION),
+                ChecksumSHA256: wrapped_recovery.data.digest,
+                ChecksumAlgorithm: "SHA256"
+            }
+        );
 
         /// Ensure wrapped_recovery_upload is successful
         if(wrapped_recovery_upload.success == false) throw wrapped_recovery_upload.error;
 
-        /// Validate master key
-        let wrapped_master = await validateWrappedJWK(event.body.master_key);
-
-        /// Ensure wrapped_master file is valid
-        if(wrapped_master.success == false) throw wrapped_master.error;
-
         /// Store master key
-        let wrapped_master_upload = await storage.private.putObject(
+        const wrapped_master_upload = await storage.private.putObject(
             `root/master-key.json`, 
-            JSON.stringify(wrapped_master.data.content),
+            wrapped_master.data.content,
             {
                 ObjectLockMode: "GOVERNANCE",
                 ObjectLockRetainUntilDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * process.env.KEYS_LOCK_DURATION),

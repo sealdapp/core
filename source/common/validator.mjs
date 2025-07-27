@@ -1,18 +1,16 @@
 "use strict";
 
+/// Import external dependencies
+import Schema from "../schema/Schema.mjs";
+
 /// Module-scoped variables
 let schema;
-let logger;
 
 export default class Validator {
 
-    constructor(__schema, __logger) {
-        /// Set module variables
-        schema = __schema;
-        logger = __logger;
-        
-        logger.debug("Validator module instantiated.")
-    }
+    constructor() {
+        schema = new Schema();
+     }
     
     Property = class {
 
@@ -57,7 +55,7 @@ export default class Validator {
 
         static isString(value) {
             try {
-                let kind = Helper.getKind(value);
+                const kind = Helper.getKind(value);
 
                 /// Failure scenarios
                 if(kind != "string") throw new Error("Data is not of string type.");
@@ -73,7 +71,7 @@ export default class Validator {
 
         static isBoolean(value) {
             try {
-                let kind = Helper.getKind(value);
+                const kind = Helper.getKind(value);
 
                 /// Failure scenarios
                 if(kind != "boolean") throw new Error("Data is not of boolean type.");
@@ -87,9 +85,41 @@ export default class Validator {
             catch(e) { return Helper.catcher(e); }
         }
 
+        static isNumber(value) {
+            try {
+                const kind = Helper.getKind(value);
+
+                /// Failure scenarios
+                if(kind != "number") throw new Error("Data is not of number type.");
+
+                /// Success scenarios
+                else return new schema.Validation({ 
+                    success: true, 
+                    result : true 
+                });
+            }
+            catch(e) { return Helper.catcher(e); }
+        }
+
+        static isObject(value) {
+            try {
+                const kind = Helper.getKind(value);
+
+                /// Failure scenarios
+                if(kind != "object") throw new Error("Data is not of object type.");
+
+                /// Success scenarios
+                else return new schema.Validation({ 
+                    success: true, 
+                    result : true 
+                });
+            }
+            catch(e) { return Helper.catcher(e); }
+        }
+
         static isArray(value) {
             try {
-                let kind = Helper.getKind(value);
+                const kind = Helper.getKind(value);
 
                 /// Failure scenarios
                 if(kind != "array") throw new Error("Data is not of array type.");
@@ -105,7 +135,7 @@ export default class Validator {
 
         static isArrayBuffer(value) {
             try {
-                let kind = Helper.getKind(value);
+                const kind = Helper.getKind(value);
                 
                 /// Failure scenarios
                 if(kind != "uint8array") throw new Error("Data is not of uint8array type.");
@@ -121,7 +151,7 @@ export default class Validator {
 
         static isNull(value) {
             try {
-                let kind = Helper.getKind(value);
+                const kind = Helper.getKind(value);
 
                 /// Failure scenarios
                 if(kind != "null") throw new Error("Data is not of null type.");
@@ -140,7 +170,7 @@ export default class Validator {
 
         static isEmpty(value) {
             try {
-                let kind = Helper.getKind(value);
+                const kind = Helper.getKind(value);
 
                 /// Ensure data type is string
                 if(kind != "string") throw new Error("Data is not of string type.");
@@ -162,7 +192,7 @@ export default class Validator {
 
         static isNotEmpty(value) {
             try {
-                let kind = Helper.getKind(value);
+                const kind = Helper.getKind(value);
 
                 /// Ensure data type is string
                 if(kind != "string") throw new Error("Data is not of string type.");
@@ -257,8 +287,8 @@ export default class Validator {
                 /// Ensure data type is number
                 if(Helper.getKind(days) != "number") throw new Error("Days is not of number type.");
 
-                let now = Date.now();
-                let days_ms = days * 24 * 60 * 60 * 1000;
+                const now = Date.now();
+                const days_ms = days * 24 * 60 * 60 * 1000;
 
                 if((now - timestamp) < days_ms) return new schema.Validation({
                     success : true,
