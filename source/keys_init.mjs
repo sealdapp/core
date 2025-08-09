@@ -47,66 +47,10 @@ await (async function init(){
 
 })()
 
-async function loadKey(key, metadata) {
+async function prepareUpload(keyObject) {
 
     try {
-        logger.debug(`Validating key.`);
-
-        /// Ensure expected top level properties exists
-        if((await validate.Property.isExistsKeys(key, [
-            "info",
-            "keys"
-        ])).result == false) throw new Error(`One or more mandatory property is missing.`);
-
-        /// Ensure key type is inside info
-        if(validate.Property.isExistsKey(key.info, "type").result == false) throw new Error(`Unkown key type.`);
-
-        let keyTypes = [];
-
-        switch(key.info.type) {
-
-            /// Set expected key types for master key
-            case "masterKey" : keyTypes = [ "rsa" ]; break;
-
-            /// Set expected key types for recovery key
-            case "recoveryKey" : keyTypes = [ "aes", "pbkdf2" ]; break;
-            
-            /// Set expected key types for user key
-            case "userKey" : keyTypes = [ "aes", "ecdh", "ecdsa", "pbkdf2" ]; break;
-
-            /// Throw error if key type is not supported
-            default : throw new Error(`Unkown key type.`);
-        }   
-
-        /// Ensure expected types are inside the keys
-        if((await validate.Property.isExistsKeys(key.keys, keyTypes)).result == false) throw new Error("One or more mandatory property of keys is missing");
-        
-        const keyData = { 
-            info : key.info,
-            keys : key.keys,
-            metadata : {
-                issuer : metadata.username,
-                issuedFor : metadata.iss,
-                root : metadata.root
-            }
-        };
-
-        let keyObject;
-
-        switch(key.info.type) {
-
-            /// Set expected key types for master key
-            case "masterKey" :  keyObject = new schema.Keys.Master(keyData); break;
-
-            /// Set expected key types for recovery key
-            case "recoveryKey" :  keyObject = new schema.Keys.Recovery(keyData); break;
-            
-            /// Set expected key types for user key
-            case "userKey" :  keyObject = new schema.Keys.User(keyData); break;
-
-            /// Throw error if key type is not supported
-            default : throw new Error(`Unkown key type.`);
-        }   
+        logger.debug(`Preparing key for upload.`);
 
         const stringified = JSON.stringify(keyObject);
 
@@ -143,7 +87,7 @@ export const handler = async(event) => {
         logger.info(`Setting up keys.`);
 
         let token;
-        let body;
+        let keys;
 
         /// Get user information from cookie
         const parse_token = await middleware.Handler.token(event);
@@ -174,8 +118,18 @@ export const handler = async(event) => {
             body : { message : parse_body.error.message }
         })
 
-        /// Construct body according to the expecte request schema for this function
-        try { body = new schema.Request.Keys.Init(parse_body.data.body) }
+        /// Ensure parsed body contains keys
+        if(validate.Property.isExistsKey(parse_body.data.body, "keys").result == false) return new schema.Response.Keys.Init({
+            statusCode : 400,
+            body : { message : "Missing keys." }
+        })
+
+        /// Insert token information inside keys
+        Object.assign(parse_body.data.body.keys, { token });
+
+        /// Construct body according to the expected request schema for this function
+        try { keys = new schema.Request.Keys.Init(parse_body.data.body.keys) }
+
 
         /// Return if body is malformed
         catch(e) { 
@@ -183,7 +137,7 @@ export const handler = async(event) => {
 
             return new schema.Response.Keys.Init({
                 statusCode : 400,
-                body : { message : e.message }
+                body : { message : "Malformed request." }
             })
         }
 
@@ -202,7 +156,7 @@ export const handler = async(event) => {
         logger.info("There is no master key detected. Proceeding with key initialization setup");
         
         /// Validate master key
-        const wrapped_master = await loadKey(body.master_key, token);
+        const wrapped_master = await prepareUpload(keys.master_key);
 
         /// Ensure wrapped_master file is valid
         if(wrapped_master.success == false) return new schema.Response.Keys.Init({
@@ -211,7 +165,7 @@ export const handler = async(event) => {
         })
 
         /// Validate recovery key
-        const wrapped_recovery = await loadKey(body.recovery_key, token);
+        const wrapped_recovery = await prepareUpload(keys.recovery_key);
 
         /// Ensure wrapped_recovery file is valid
         if(wrapped_recovery.success == false) return new schema.Response.Keys.Init({
@@ -220,7 +174,7 @@ export const handler = async(event) => {
         })
 
         /// Validate root user key
-        const root_key = await loadKey(body.root_key, token);
+        const root_key = await prepareUpload(keys.root_key);
 
         /// Ensure root user key file is valid
         if(root_key.success == false) return new schema.Response.Keys.Init({

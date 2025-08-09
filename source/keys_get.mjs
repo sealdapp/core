@@ -75,11 +75,13 @@ export const handler = async(event) => {
             /// This should effectively signal that the keys has not been set up
             if(master_key.exists == false) return new schema.Response.Keys.Get({
                 statusCode : 200,
-                device : new schema.Keys.Device({}),
+                device : new schema.Keys.User({}),
                 master : new schema.Keys.Master({}),
                 root : true
             })
 
+            /// Convert buffer to json
+            const key_value_master = await utils.Parser.bufferToJson(master_key.data);
 
             /// Get root device key
             const root_key = await storage.private.getObject(`root/user-key.json`);
@@ -90,7 +92,7 @@ export const handler = async(event) => {
             /// Return empty user-key if not yet setup
             if(root_key.exists == false) return new schema.Response.Keys.Get({
                 statusCode : 200,
-                device : new schema.Keys.Device({}),
+                device : new schema.Keys.User({}),
                 master : new schema.Keys.Master({}),
                 root : true
             })
@@ -103,8 +105,8 @@ export const handler = async(event) => {
 
             return new schema.Response.Keys.Get({
                 statusCode : 200,
-                device : new schema.Keys.Device({}),
-                master : new schema.Keys.Master({}),
+                device : new schema.Keys.User(key_value_root.data.json),
+                master : new schema.Keys.Master(key_value_master.data.json),
                 root : true
             })
 

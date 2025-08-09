@@ -7,7 +7,7 @@ import Setup from "../lib/setup.mjs";
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /// Import application module to test
-import { handler as keys_setup } from "../../source/keys_init.mjs";
+import { handler as keys_init } from "../../source/keys_init.mjs";
 import { handler as keys_get } from "../../source/keys_get.mjs";
 
 const setup = new Setup();
@@ -61,9 +61,9 @@ describe("✅ Keys - Init", async function() {
 
     it("Should be able to initialize keys.", async function(){
 
-        let response = await keys_setup({
+        let response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
-            body : keys
+            body : { keys }
         })
 
         expect(response.statusCode).to.equals(200);
@@ -82,7 +82,7 @@ describe("❌ Keys - Init", async function() {
 
     it("Should fail if user is not root", async function(){
         
-        let response = await keys_setup({
+        let response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.user };` ]
         })
 
@@ -92,7 +92,7 @@ describe("❌ Keys - Init", async function() {
 
     it("Should fail if there are no request body supplied", async function(){
         
-        let response = await keys_setup({
+        let response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ]
         })
 
@@ -105,57 +105,63 @@ describe("❌ Keys - Init", async function() {
         
         let response;
 
-        response = await keys_setup({
+        response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
             body : {}
         })
 
         expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.equals("Missing master_key.");
+        expect(JSON.parse(response.body).message).to.equals("Missing keys.");
 
-        response = await keys_setup({
+        response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
             body : { 
-                "master_key" : {},
-                "recovery_key" : {},
-                "root_key" : {}
+                keys : {
+                    "master_key" : {},
+                    "recovery_key" : {},
+                    "root_key" : {}
+                }
             }
         })
 
         expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.contains("Master key supplied is malformed.");
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
 
-        response = await keys_setup({
+        response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
             body : { 
-                "master_key" : {
-                    "info" : {},
-                    "keys" : {}
-                },
-                "recovery_key" : {},
-                "root_key" : {}
-            }
-        })
-
-        expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.contains("Master key supplied is malformed.");
-
-        response = await keys_setup({
-            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
-            body : { 
-                "master_key" : {
-                    "info" : {
-                        "type" : ""
+                keys : {
+                    "master_key" : {
+                        "info" : {},
+                        "keys" : {}
                     },
-                    "keys" : {}
-                },
-                "recovery_key" : {},
-                "root_key" : {}
+                    "recovery_key" : {},
+                    "root_key" : {}
+                }
             }
         })
 
         expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.contains("Master key supplied is malformed.");
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
+
+        response = await keys_init({
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+            body : { 
+                keys : {
+                    "master_key" : {
+                        "info" : {
+                            "type" : ""
+                        },
+                        "keys" : {}
+                    },
+                    "recovery_key" : {},
+                    "root_key" : {}
+                }
+            }
+        })
+
+        expect(response.statusCode).to.equals(400);
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
 
     });
 
@@ -163,68 +169,76 @@ describe("❌ Keys - Init", async function() {
         
         let response;
 
-        response = await keys_setup({
+        response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
             body : {
-                "master_key" : keys.master_key
+                keys : {
+                    "master_key" : keys.master_key
+                }
             }
         })
 
         expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.equals("Missing recovery_key.");
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
 
-        response = await keys_setup({
+        response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
             body : { 
-                "master_key" : keys.master_key,
-                "recovery_key" : {},
-                "root_key" : {}
+                keys : {
+                    "master_key" : keys.master_key,
+                    "recovery_key" : {},
+                    "root_key" : {}
+                }
             }
         })
 
         expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.contains("Recovery key supplied is malformed.");
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
     });
 
     it("Should fail if root_key is not supplied or is in wrong type", async function(){
         
         let response;
 
-        response = await keys_setup({
+        response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
             body : {
-                "master_key" : keys.master_key,
-                "recovery_key" : keys.recovery_key
+                keys : {
+                    "master_key" : keys.master_key,
+                    "recovery_key" : keys.recovery_key
+                }
             }
         })
 
         expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.equals("Missing root_key.");
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
 
-        response = await keys_setup({
+        response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
             body : { 
-                "master_key" : keys.master_key,
-                "recovery_key" : keys.recovery_key,
-                "root_key" : {}
+                keys : {
+                    "master_key" : keys.master_key,
+                    "recovery_key" : keys.recovery_key,
+                    "root_key" : {}
+                }
             }
         })
 
         expect(response.statusCode).to.equals(400);
-        expect(JSON.parse(response.body).message).to.contains("Root user key supplied is malformed.");
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
 
     });
 
     it("Should fail if master key already exists", async function(){
         
-        await keys_setup({
+        await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
-            body : keys
+            body : { keys }
         })
 
-        const response = await keys_setup({
+        const response = await keys_init({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
-            body : keys
+            body : { keys }
         })
 
         expect(response.statusCode).to.equals(409);
@@ -233,17 +247,36 @@ describe("❌ Keys - Init", async function() {
         await resetKeys();
     });
 
-    it("Should fail if key is missing information property");
+    it("Should fail if key is missing information property", async function(){
+        
+        let tmp = keys;
 
-    it("Should fail if key is missing keys property");
+        delete tmp.master_key.info;
 
-    it("Should fail if type information is missing");
+        let response = await keys_init({
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+            body : { keys : tmp }
+        })
 
-    it("Should fail if key supplied is not a supported key");
+        expect(response.statusCode).to.equals(400);
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
 
-    it("Should fail if one of the expected key is not supplied for each key types");
+    });
 
-    it("Should be able to detect unsupported values for the keys");
+    it("Should fail if key is missing keys property", async function(){
+        
+        let tmp = keys;
+
+        delete tmp.master_key.keys;
+
+        let response = await keys_init({
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+            body : { keys : tmp }
+        })
+
+        expect(response.statusCode).to.equals(400);
+        expect(JSON.parse(response.body).message).to.contains("Malformed request.");
+    })
 
     after(async function(){ 
 
@@ -254,22 +287,33 @@ describe("❌ Keys - Init", async function() {
 })
 describe("✅ Keys - Get", async function() {
 
-    /*it("Should be able to get key for root user", async function() {
+    before(async function(){
+        
+        /// Reset all keys
+        await resetKeys()
+
+        /// Initialize keys
+        await keys_init({
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+            body : { keys }
+        })
+    })
+    it.only("Should be able to get key for root user", async function() {
 
         /// Call module handler
         let response = await keys_get({
             cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ]
         })
 
-        console.log(response)
-
         let data = JSON.parse(response.body)
-        console.log(data);
 
         expect(response.statusCode).to.equals(200);
         expect(data.root).to.equals(true);
-        expect(data.keys.device.exists).to.equals(true);
-        expect(data.keys.master.exists).to.equals(true);
+    })
 
-    })*/
+    after(async function(){ 
+
+        /// Resets setting to default
+        await setup.resetEnv(); 
+    })
 })

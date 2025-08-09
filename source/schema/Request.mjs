@@ -35,7 +35,7 @@ export default class Request {
 
         static Init = class {
 
-            constructor({ master_key, recovery_key, root_key }){
+            constructor({ master_key, recovery_key, root_key, token }){
 
                 const validate = new Validator();
 
@@ -45,7 +45,22 @@ export default class Request {
 
                 if(validate.Type.isObject(root_key).result == false) throw new Error("Missing root_key.")
 
-                Object.assign(this, { ...arguments[0] });
+                /// Extract metadata information from token
+                let metadata = {
+                    issuer : token.username,
+                    issuedFor : token.iss,
+                    root : token.root
+                }
+
+                /// Inject metadata information to keys
+                master_key.metadata = metadata;
+                recovery_key.metadata = metadata;
+                root_key.metadata = metadata;
+
+                /// Create new instance of Keys
+                this.master_key = new Keys.Master(master_key);
+                this.recovery_key = new Keys.Recovery(recovery_key);
+                this.root_key = new Keys.User(root_key);
             }
         }
     }

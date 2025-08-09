@@ -121,7 +121,7 @@ export default class Storage extends Storages {
             const response = await this.#client.send(command);
 
             /// Set an empty container for output
-            const output = new Uint8Array(0);
+            let output = new Uint8Array(0);
 
             /// Extract output if file has content
             if(response.ContentLength > 0) {
