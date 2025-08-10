@@ -137,8 +137,6 @@ export default class Storage extends Storages {
                 output = download.data.buffer;
             }
 
-            console.log(output)
-
             return new schema.Storage.GetObject({
                 success : true,
                 exists : true,

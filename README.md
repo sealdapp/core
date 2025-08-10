@@ -7,16 +7,25 @@ DONE    verify
 
 Keys
 DONE    initialize
-DONE    get
-ONGOING recover  --> on an event root key for some reason was deleted
+DONE    getuser
+DONE    getmaster
+DONE    getrecovery
+DONE    recover
 
         
 Folder
         create
         list
         delete
+        share
 
 Files
         create
         list
+        delete
+        share
+
+Users
+        invite
+        accept
         delete

@@ -85,6 +85,6 @@ export const handler = async(event) => {
 
         logger.error(`Something went wrong. ${ e.stack }`)
         
-        return new schema.Response.Jobs({ })
+        return new schema.Response.Base({ })
     }
 }

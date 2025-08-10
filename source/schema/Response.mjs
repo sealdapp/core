@@ -51,24 +51,32 @@ export default class Response {
             }
         }
 
-        static Get = class extends Response.Base {
+        static Recover = class extends Response.Base {
 
-            constructor({ body = {}, device = null, master = null, root = false }) {
+            constructor({ }) {
                 super({ ...arguments[0] });
 
-                /// Set default body value
-                this.body = body;
+            }
+        }
 
-                /// Insert root value inside body
-                this.body.root = root;
-                
-                /// Insert device key and master key if root
-                if(root) this.body.keys = { device, master };
+        static Get = class {
 
-                /// Insert device key only if non-root
-                else this.body.keys = { device };
+            static User = class extends Response.Base {
+                constructor({ }) {
+                    super({ ...arguments[0] });
+                }
+            }
 
-                this.body = JSON.stringify(this.body);
+            static Recovery = class extends Response.Base {
+                constructor({ }) {
+                    super({ ...arguments[0] });
+                }
+            }
+
+            static Master = class extends Response.Base {
+                constructor({ }) {
+                    super({ ...arguments[0] });
+                }
             }
         }
 

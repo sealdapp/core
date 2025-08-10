@@ -11,7 +11,7 @@ let env_files = [
     '../dev/.env.creds.aws'
 ]
 
-dotenv.config({ path: env_files }); // load specific dotenv file
+dotenv.config({ path: env_files, quiet : true }); // load specific dotenv file
 
 let auth_signin;
 
@@ -43,11 +43,18 @@ export default class Setup {
         this.APP_TOKEN_ROOT = await this.getSessionToken(this.TOKEN_ROOT);
         this.APP_TOKEN_USER = await this.getSessionToken(this.TOKEN_USER);
     }
+
+    async getSectionTitle(type) {
+        if(type === "success") return "𝑆𝑢𝑐𝑐𝑒𝑠𝑠";
+
+        else return "𝐹𝑎𝑖𝑙𝑢𝑟𝑒";
+    }
     async resetEnv(){
 
         dotenv.config({ 
             override : true,
-            path: env_files
+            path: env_files,
+            quiet : true
         });
     }
 

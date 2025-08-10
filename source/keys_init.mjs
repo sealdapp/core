@@ -82,26 +82,11 @@ async function prepareUpload(keyObject) {
 
 export const handler = async(event) => {
 
-    try {
+    return await middleware.Handler.main(event, async function({ token, body }){
 
         logger.info(`Setting up keys.`);
 
-        let token;
         let keys;
-
-        /// Get user information from cookie
-        const parse_token = await middleware.Handler.token(event);
-
-        /// Return bad request if token information extraction failed
-        if(parse_token.success == false) return new schema.Response.Keys.Init({
-            statusCode : 400,
-            body : {
-                message : "Bad request"
-            }
-        })
-
-        /// Construct token. Validation skipped since it was already validated by authverify
-        token = new schema.Request.Token(parse_token.data.decoded)
 
         /// Ensure user is root
         if(token.root == false) return new schema.Response.Keys.Init({
@@ -109,27 +94,17 @@ export const handler = async(event) => {
             body : { message : "You are not authorized." }
         })
 
-        /// Ensure request body is correct
-        const parse_body = await middleware.Handler.body(event);
-
-        /// Return bad request if body data extraction failed
-        if(parse_body.success == false) return new schema.Response.Keys.Init({
-            statusCode : 400,
-            body : { message : parse_body.error.message }
-        })
-
         /// Ensure parsed body contains keys
-        if(validate.Property.isExistsKey(parse_body.data.body, "keys").result == false) return new schema.Response.Keys.Init({
+        if(validate.Property.isExistsKey(body, "keys").result == false) return new schema.Response.Keys.Init({
             statusCode : 400,
             body : { message : "Missing keys." }
         })
 
         /// Insert token information inside keys
-        Object.assign(parse_body.data.body.keys, { token });
+        Object.assign(body.keys, { token });
 
         /// Construct body according to the expected request schema for this function
-        try { keys = new schema.Request.Keys.Init(parse_body.data.body.keys) }
-
+        try { keys = new schema.Request.Keys.Init(body.keys) }
 
         /// Return if body is malformed
         catch(e) { 
@@ -141,46 +116,37 @@ export const handler = async(event) => {
             })
         }
 
-        /// Get master key
-        const master_key = await storage.private.headObject(`root/master-key.json`);
+        /// Get recovery key
+        const recovery_key = await storage.private.headObject(`root/recovery-key.json`);
 
-        /// Ensure master key retrieval is successful
-        if(master_key.success == false) throw master_key.error;
+        /// Ensure recovery key retrieval is successful
+        if(recovery_key.success == false) throw recovery_key.error;
 
-        /// Ensure master key doesn't exists yet
-        if(master_key.exists == true) return new schema.Response.Keys.Init({
+        /// Ensure recovery key doesn't exists yet
+        if(recovery_key.exists == true) return new schema.Response.Keys.Init({
             statusCode : 409,
-            body : { message : "Master key already exists." }
+            body : { message : "Keys already initialized." }
         })
 
-        logger.info("There is no master key detected. Proceeding with key initialization setup");
+        logger.info("There is no recovery key detected. Proceeding with key initialization setup");
         
         /// Validate master key
         const wrapped_master = await prepareUpload(keys.master_key);
 
         /// Ensure wrapped_master file is valid
-        if(wrapped_master.success == false) return new schema.Response.Keys.Init({
-            statusCode : 400,
-            body : { message : "Master key supplied is malformed." }
-        })
+        if(wrapped_master.success == false) throw wrapped_master.error;
 
         /// Validate recovery key
         const wrapped_recovery = await prepareUpload(keys.recovery_key);
 
         /// Ensure wrapped_recovery file is valid
-        if(wrapped_recovery.success == false) return new schema.Response.Keys.Init({
-            statusCode : 400,
-            body : { message : "Recovery key supplied is malformed." }
-        })
+        if(wrapped_recovery.success == false) throw wrapped_recovery.error;
 
         /// Validate root user key
         const root_key = await prepareUpload(keys.root_key);
 
         /// Ensure root user key file is valid
-        if(root_key.success == false) return new schema.Response.Keys.Init({
-            statusCode : 400,
-            body : { message : "Root user key supplied is malformed." }
-        })
+        if(root_key.success == false) throw root_key.error;
 
         logger.info("All keys supplied are valid. Proceeding with the upload.");
 
@@ -189,6 +155,12 @@ export const handler = async(event) => {
 
         /// Ensure root user key upload is successful
         if(root_key_upload.success == false) throw root_key_upload.error;
+
+        /// Store master key
+        const wrapped_master_upload = await storage.private.putObject(`root/master-key.json`, wrapped_master.data.content);
+
+        /// Ensure wrapped_recovery_upload is successful
+        if(wrapped_master_upload.success == false) throw wrapped_master_upload.error;
 
         /// Store recovery key 
         const wrapped_recovery_upload = await storage.private.putObject(
@@ -205,32 +177,11 @@ export const handler = async(event) => {
         /// Ensure wrapped_recovery_upload is successful
         if(wrapped_recovery_upload.success == false) throw wrapped_recovery_upload.error;
 
-        /// Store master key
-        const wrapped_master_upload = await storage.private.putObject(
-            `root/master-key.json`, 
-            wrapped_master.data.content,
-            {
-                ObjectLockMode: "GOVERNANCE",
-                ObjectLockRetainUntilDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * process.env.KEYS_LOCK_DURATION),
-                ChecksumSHA256: wrapped_master.data.digest,
-                ChecksumAlgorithm: "SHA256"
-            }
-        );
-
-        /// Ensure wrapped_recovery_upload is successful
-        if(wrapped_master_upload.success == false) throw wrapped_master_upload.error;
-
         logger.info(`Keys successfully initialized!`)
 
         return new schema.Response.Keys.Init({ 
             statusCode : 200
         })
-    }
 
-    catch(e) {
-
-        logger.error(`Something went wrong. ${ e.stack }`)
-        
-        return new schema.Response.Keys.Init({ })
-    }
+    })
 }

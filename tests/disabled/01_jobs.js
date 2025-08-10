@@ -9,18 +9,26 @@ import { handler as job_keys_rotate_session } from "../../source/job_keys_rotate
 
 let setup = new Setup();
 
+const sectionTitle = {
+    success : await setup.getSectionTitle("success"),
+    failure : await setup.getSectionTitle("failure")
+}
+
 /// Initialize setup
 before(async function() { await setup.init(); })
 
-describe("✅ Jobs - Session Rotate", async function() {
+describe("job_keys_rotate_session", async function() {
 
-    it("Should be able to rotate session keys", async function() {
+    describe(sectionTitle.success, async function() {
+        
+        it("Should be able to rotate session keys", async function() {
 
-        /// Call module handler
-        let response = await job_keys_rotate_session({})
+            /// Call module handler
+            let response = await job_keys_rotate_session({})
 
-        expect(response.statusCode).to.equal(200);
+            expect(response.statusCode).to.equal(200);
 
+        })
     })
 })
 
