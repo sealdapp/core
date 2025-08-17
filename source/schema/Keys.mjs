@@ -40,6 +40,7 @@ export default class Keys {
             this.metadata = new Templates.Metadata(metadata);
             this.keys.aes = new Templates.Keys.AES(keys.aes);
             this.keys.pbkdf2 = new Templates.Keys.PBKDF2(keys.pbkdf2);
+            this.keys.rsa = new Templates.Keys.RSA(keys.rsa);
             this.keys.ecdh = new Templates.Keys.ECDH(keys.ecdh);
             this.keys.ecdsa = new Templates.Keys.ECDSA(keys.ecdsa);
         }
@@ -84,10 +85,9 @@ class Templates {
     }
 
     static Metadata = class {
-        constructor({ issuer, issuedFor, root }) {
+        constructor({ issuer, issuedFor }) {
             this.issuer = Helper.validateStringExist(issuer, "Metadata issuer");
             this.issuedFor = Helper.validateStringExist(issuedFor, "Metadata issued for");
-            this.root = Helper.validate(root, "boolean");
         }
     }
 

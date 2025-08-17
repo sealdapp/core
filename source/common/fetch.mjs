@@ -28,7 +28,7 @@ export default class Fetch {
                 headers: { 'Accept': 'application/json', ...headers },
             });
 
-            if (response.ok == false) {
+            if (response.ok != true) {
                 const message = await response.text();
 
                 logger.error(`Failed to invoke get request to ${ url }. ${ message }`)

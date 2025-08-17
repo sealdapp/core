@@ -18,16 +18,16 @@ export default class Platform {
         this.platform;
 
         /// Ensure platform is defined
-        if(validate.Property.isExistsKey(process.env, "PLATFORM").result == false) throw new Error("PLATFORM not configured.");
+        if(validate.Property.isExistsKey(process.env, "PLATFORM").result != true) throw new Error("PLATFORM not configured.");
 
         /// Ensure authentication type is defined
-        if(validate.Property.isExistsKey(process.env, "AUTH_TYPE").result == false) throw new Error("AUTH_TYPE not configured.");
+        if(validate.Property.isExistsKey(process.env, "AUTH_TYPE").result != true) throw new Error("AUTH_TYPE not configured.");
 
         /// Ensure authentication type is defined
-        if(validate.Property.isExistsKey(process.env, "STORAGE_TYPE").result == false) throw new Error("STORAGE_TYPE not configured.");
+        if(validate.Property.isExistsKey(process.env, "STORAGE_TYPE").result != true) throw new Error("STORAGE_TYPE not configured.");
 
         /// Ensure secrets type is defined
-        if(validate.Property.isExistsKey(process.env, "SECRET_TYPE").result == false) throw new Error("SECRET_TYPE not configured.");
+        if(validate.Property.isExistsKey(process.env, "SECRET_TYPE").result != true) throw new Error("SECRET_TYPE not configured.");
 
         logger.debug("Platform loader instantiated.")
     }
@@ -53,7 +53,7 @@ export default class Platform {
 
         const init = await this.platform.init();
 
-        if(init.success == false) throw new Error(`Failed to load platform. ${ init.error.stack }`)
+        if(init.success != true) throw new Error(`Failed to load platform. ${ init.error.stack }`)
         
         return this.platform;
     }

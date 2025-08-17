@@ -9,6 +9,7 @@ import Fetch from "./Fetch.mjs";
 import Crypto from "./Crypto.mjs";
 import Secret from "./Secret.mjs";
 import Authentication from "./Authentication.mjs";
+import Roles from "./Roles.mjs";
 import Storage from "./Storage.mjs";
 
 import Keys from "./Keys.mjs";
@@ -24,6 +25,7 @@ export default class Schema {
         this.Crypto = Crypto;
         this.Secret = Secret;
         this.Authentication = Authentication;
+        this.Roles = Roles;
         this.Storage = Storage;
 
         this.Keys = Keys;

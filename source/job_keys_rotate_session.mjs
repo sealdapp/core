@@ -32,10 +32,10 @@ await (async function init(){
     logger.info("Initializing application...");
 
     /// Ensure root user email is defined
-    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result == false) throw new Error("ROOT_USER not configured.");
+    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result != true) throw new Error("ROOT_USER not configured.");
 
     /// Ensure jwt private key to be used is defined
-    if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result == false) throw new Error("SECRET_JWT_PRIVATE not configured");
+    if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result != true) throw new Error("SECRET_JWT_PRIVATE not configured");
     
     /// Load all the plugins for the platform
     const plugins = await platform.load();
@@ -74,7 +74,7 @@ export const handler = async(event) => {
         const rotated = await session.rotate_keys();
 
         /// Ensure verification operation is successful
-        if(rotated.success == false) throw rotated.error;
+        if(rotated.success != true) throw rotated.error;
 
         return new schema.Response.Jobs({
             statusCode : 200 

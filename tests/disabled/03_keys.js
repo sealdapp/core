@@ -12,6 +12,7 @@ import { handler as keys_get_user } from "../../source/keys_get_user.mjs";
 import { handler as keys_get_master } from "../../source/keys_get_master.mjs";
 import { handler as keys_get_recovery } from "../../source/keys_get_recovery.mjs";
 import { handler as keys_recover } from "../../source/keys_recover.mjs";
+import { handler as keys_builtin } from "../../source/keys_builtin.mjs";
 
 const setup = new Setup();
 
@@ -32,19 +33,19 @@ async function resetKeys() {
     /// Delete master key
     await storage.send(new DeleteObjectCommand({
         Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-        Key : `root/master-key.json`
+        Key : `system/keys/master-key.json`
     }));
 
     /// Delete recovery key
     await storage.send(new DeleteObjectCommand({
         Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-        Key : `root/recovery-key.json`
+        Key : `system/keys/recovery-key.json`
     }));
 
     /// Delete recovery key
     await storage.send(new DeleteObjectCommand({
         Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-        Key : `root/user-key.json`
+        Key : `system/users/registered/root/user-key.json`
     }));
 
     /// Generate keys
@@ -75,7 +76,7 @@ describe("keys_init", async function() {
 
             expect(response.statusCode).to.equals(200);
         })
-
+        
         after(async function(){ 
 
             /// Resets setting to default
@@ -347,7 +348,7 @@ describe("keys_get_user", async function() {
             /// Delete recovery key
             await storage.send(new DeleteObjectCommand({
                 Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-                Key : `root/user-key.json`
+                Key : `system/users/registered/root/user-key.json`
             }));
             
             /// Call module handler
@@ -429,7 +430,7 @@ describe("keys_get_master", async function() {
             /// Delete recovery key
             await storage.send(new DeleteObjectCommand({
                 Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-                Key : `root/master-key.json`
+                Key : `system/keys/master-key.json`
             }));
             
             /// Call module handler
@@ -524,7 +525,7 @@ describe("keys_get_recovery", async function() {
             /// Delete recovery key
             await storage.send(new DeleteObjectCommand({
                 Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-                Key : `root/recovery-key.json`
+                Key : `system/keys/recovery-key.json`
             }));
             
             /// Call module handler
@@ -583,19 +584,19 @@ describe("keys_recover", async function() {
             /// Delete master key
             await storage.send(new DeleteObjectCommand({
                 Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-                Key : `root/master-key.json`
+                Key : `system/keys/master-key.json`
             }));
 
             /// Delete recovery key
             await storage.send(new DeleteObjectCommand({
                 Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-                Key : `root/user-key.json`
+                Key : `system/users/registered/root/user-key.json`
             }));
 
             // await new Promise(r => setTimeout(r, 3000));
         })
 
-        it("Should be to recover root user key", async function() {
+        it("Should be able to recover root user key", async function() {
 
             let response = await keys_recover({
                 cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
@@ -632,7 +633,7 @@ describe("keys_recover", async function() {
             /// Delete recovery key
             await storage.send(new DeleteObjectCommand({
                 Bucket : process.env.STORAGE_BUCKET_PRIVATE,
-                Key : `root/recovery-key.json`
+                Key : `system/keys/recovery-key.json`
             }));
 
             let response = await keys_recover({
@@ -755,4 +756,26 @@ describe("keys_recover", async function() {
 
     })
     
+})
+
+describe.only("keys_builtin", async function() {
+
+    describe(sectionTitle.success, async function() {
+
+        it("Should be able to get build keys for creating a new folder", async function(){
+
+            const response = await keys_builtin({
+                cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+                body : { 
+                    type : "gallery"
+                }
+            })
+
+            expect(response.statusCode).to.equals(200);
+        })
+    })
+
+    describe(sectionTitle.failure, async function() {
+
+    })
 })

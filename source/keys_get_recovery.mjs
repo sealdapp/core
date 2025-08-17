@@ -27,10 +27,10 @@ await (async function init(){
     logger.info("Initializing application...");
 
     /// Ensure root user email is defined
-    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result == false) throw new Error("ROOT_USER not configured.");
+    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result != true) throw new Error("ROOT_USER not configured.");
     
     /// Validate if s3 bucket is defined
-    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
+    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result != true) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
     const plugins = await platform.load();
@@ -52,19 +52,19 @@ export const handler = async(event) => {
         logger.debug(`Get recovery key request received.`);
 
         /// Ensure user is root
-        if(token.root == false) return new schema.Response.Keys.Get.Recovery({
+        if(token.role.name != "root") return new schema.Response.Keys.Get.Recovery({
             statusCode : 401,
             body : { message : "You are not authorized." }
         })
 
         /// Get recovery key
-        const recovery_key = await storage.private.getObject(`root/recovery-key.json`);
+        const recovery_key = await storage.private.getObject(`system/keys/recovery-key.json`);
 
         /// Ensure retrieval of recovery key is successful
-        if(recovery_key.success == false) throw recovery_key.error;
+        if(recovery_key.success != true) throw recovery_key.error;
 
         /// Return empty recovery-key if not yet setup
-        if(recovery_key.exists == false) return new schema.Response.Keys.Get.Recovery({
+        if(recovery_key.exists != true) return new schema.Response.Keys.Get.Recovery({
             statusCode : 404,
             body : { message : "Key not found." }
         })
@@ -73,7 +73,7 @@ export const handler = async(event) => {
         const key_value = await utils.Parser.bufferToJson(recovery_key.data);
 
         /// Ensure parsing of recovery key value is successful
-        if(key_value.success == false) throw key_value.error;
+        if(key_value.success != true) throw key_value.error;
 
         /// Try to load key
         let keyObject;

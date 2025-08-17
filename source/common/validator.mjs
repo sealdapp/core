@@ -302,6 +302,30 @@ export default class Validator {
             catch(e) { return Helper.catcher(e); }
         }
     }
+
+    List = class {
+
+        static isStringInside(list, data) {
+            try {
+                
+                /// Ensure list to check is a list type
+                if(Helper.getKind(list) != "array") throw new Error("Data provided is not of array type.");
+
+                /// Ensure data to find inside list is in string format
+                if(Helper.getKind(data) != "string") throw new Error("Data to find is not of string type.");
+
+                if(list.includes(data)) return new schema.Validation({
+                    success : true,
+                    result : true
+                })
+
+                else return new schema.Validation({
+                    success : true
+                })
+            }
+            catch(e) { return Helper.catcher(e); }
+        }
+    }
 }
 
 class Helper {

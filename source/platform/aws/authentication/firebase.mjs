@@ -31,10 +31,10 @@ export default class Authenticator extends Authenticators {
         validate = __validate;
 
         /// Validate google client id if it exists inside environment variables
-        if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROVIDERS").result == false) throw new Error("AUTH_FIREBASE_PROVIDERS is not defined.");
+        if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROVIDERS").result != true) throw new Error("AUTH_FIREBASE_PROVIDERS is not defined.");
 
         /// Validate google client id if it exists inside environment variables
-        if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROJECTID").result == false) throw new Error("AUTH_FIREBASE_PROJECTID is not defined.");
+        if(validate.Property.isExistsKey(process.env, "AUTH_FIREBASE_PROJECTID").result != true) throw new Error("AUTH_FIREBASE_PROJECTID is not defined.");
 
         this.#cache = new Cache();
         
@@ -53,7 +53,7 @@ export default class Authenticator extends Authenticators {
             const firebase_cached = await this.#cache.getKeys("init");
 
             /// Ensure caching of public key is successful
-            if(firebase_cached.success == false) throw firebase_cached.error;
+            if(firebase_cached.success != true) throw firebase_cached.error;
 
             logger.debug("Firebase plugin successfully initialized")
 
@@ -85,10 +85,10 @@ export default class Authenticator extends Authenticators {
             logger.info("Sign in request received. Validating request");
 
             /// Ensure body contains oauth_token parameter
-            if(validate.Property.isExistsKey(body, "oauth_token").result == false) throw new Error("Missing oauth_token.")
+            if(validate.Property.isExistsKey(body, "oauth_token").result != true) throw new Error("Missing oauth_token.")
             
             /// Ensure string is not empty
-            if(validate.String.isNotEmpty(body.oauth_token).result == false) throw new Error("Invalid oauth_token.");
+            if(validate.String.isNotEmpty(body.oauth_token).result != true) throw new Error("Invalid oauth_token.");
 
             // Decode token to get the header (for 'kid')
             const decoded = jwt.decode(body.oauth_token, { complete: true });
@@ -100,25 +100,25 @@ export default class Authenticator extends Authenticators {
             const cache_firebase_keys = await this.#cache.getKeys(decoded.header.kid);
 
             /// Ensure retrieval from cache is successful
-            if(cache_firebase_keys.success == false) throw cache_firebase_keys.error;
+            if(cache_firebase_keys.success != true) throw cache_firebase_keys.error;
 
             /// Otherwise, store actual value
             const google_cert_pubkey = cache_firebase_keys.data.google_cert_pubkey;
 
             /// Second attempt, throw failure
-            if(validate.Property.isExistsKey(google_cert_pubkey, decoded.header.kid).result == false) throw new jwt.TokenExpiredError("Invalid token.");
+            if(validate.Property.isExistsKey(google_cert_pubkey, decoded.header.kid).result != true) throw new jwt.TokenExpiredError("Invalid token.");
 
             /// Validate if email address exists
-            if(validate.Property.isExistsKey(decoded.payload, "email").result == false) throw new Error("Email is not known from token payload.");
+            if(validate.Property.isExistsKey(decoded.payload, "email").result != true) throw new Error("Email is not known from token payload.");
 
             /// Validate if email_verifed exists
-            if(validate.Property.isExistsKey(decoded.payload, "email_verified").result == false) throw new Error("Email verified is not known from token payload.");
+            if(validate.Property.isExistsKey(decoded.payload, "email_verified").result != true) throw new Error("Email verified is not known from token payload.");
 
             /// Ensure email address was verified
-            if(validate.Type.isBoolean(decoded.payload.email_verified).result == false) throw new Error("Email verified is not valid.");
+            if(validate.Type.isBoolean(decoded.payload.email_verified).result != true) throw new Error("Email verified is not valid.");
 
             /// Ensure email_verified is set to true only when not in dev
-            if(decoded.payload.email_verified == false) {
+            if(decoded.payload.email_verified != true) {
                 
                 /// Skip email verification check if running on dev environment
                 if(process.env.NODE_ENV === "dev") logger.debug(`Detected dev environment. Skipping email verification check`);
@@ -189,7 +189,7 @@ const Cache = class {
     async getKeys(kid){
 
         /// If the kid supplied does not exists from cache, refresh cache
-        if(validate.Property.isExistsKey(this.#google_cert_pubkey, kid).result == false) {
+        if(validate.Property.isExistsKey(this.#google_cert_pubkey, kid).result != true) {
 
             logger.debug(`kid [${ kid }] does not exists from local cache. Refreshing...`);
 
@@ -217,7 +217,7 @@ const Cache = class {
             });
 
             /// Ensure response is successful
-            if(response.success == false) throw new Error(`Returns failure. ${ response.error.message }`)
+            if(response.success != true) throw new Error(`Returns failure. ${ response.error.message }`)
 
             /// Ensure response returns 200 response code
             if(response.code != 200) throw new Error(`Returns non-200 response code. ${ response.code }. ${ response.error.message }`)

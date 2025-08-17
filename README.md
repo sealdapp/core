@@ -11,7 +11,6 @@ DONE    getuser
 DONE    getmaster
 DONE    getrecovery
 DONE    recover
-
         
 Folder
         create
@@ -28,4 +27,6 @@ Files
 Users
         invite
         accept
+        reject
         delete
+        request

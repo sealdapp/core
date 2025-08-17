@@ -22,11 +22,11 @@ export default class Authentication {
     static Token = class {
 
         static Payload = class {
-            constructor({ auth_type = "", user_id = "", username = "", root = false } = {}) {
+            constructor({ auth_type = "", user_id = "", username = "", role = {} } = {}) {
                 this.auth_type = Helper.validate(auth_type, "string");
                 this.user_id = Helper.validate(user_id, "string");
                 this.username = Helper.validate(username, "string");
-                this.root = Helper.validate(root, "boolean");
+                this.role = Helper.validate(role, "object");
             }
         }
     }

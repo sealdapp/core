@@ -25,7 +25,7 @@ export default class Utilities {
                 logger.debug(`Parsing cookie list.`);
         
                 /// Ensure list is in array type
-                if(validate.Type.isArray(list).result == false) throw new Error(`Data provided is not of list format.`);
+                if(validate.Type.isArray(list).result != true) throw new Error(`Data provided is not of list format.`);
         
                 const parsed = {};
                 for (const cookie of list) {
@@ -57,7 +57,7 @@ export default class Utilities {
                 logger.debug(`Parsing buffer data to json format`);
 
                 /// Ensure data is buffer type
-                if(validate.Type.isArrayBuffer(buffer).result == false) throw new Error(`Data provided is not in buffer format.`);
+                if(validate.Type.isArrayBuffer(buffer).result != true) throw new Error(`Data provided is not in buffer format.`);
 
                 /// Convert buffer to string first
                 const string = buffer.toString("utf-8");

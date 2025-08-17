@@ -27,7 +27,7 @@ export default class Middleware {
         static async initialize(response){
 
             /// Ensure secret initialization is successful
-            if(response.success == false) throw response.error;
+            if(response.success != true) throw response.error;
 
         }
     }
@@ -44,7 +44,7 @@ export default class Middleware {
                 const parse_token = await Middleware.#handlerToken(event);
 
                 /// Return bad request if token information extraction failed
-                if(parse_token.success == false) return new schema.Response.Keys.Init({
+                if(parse_token.success != true) return new schema.Response.Keys.Init({
                     statusCode : 400,
                     body : {
                         message : "Bad request"
@@ -58,7 +58,7 @@ export default class Middleware {
                 const parse_body = await Middleware.#handlerBody(event);
 
                 /// Return bad request if body data extraction failed
-                if(parse_body.success == false) return new schema.Response.Keys.Init({
+                if(parse_body.success != true) return new schema.Response.Keys.Init({
                     statusCode : 400,
                     body : { message : parse_body.error.message }
                 })
@@ -90,16 +90,16 @@ export default class Middleware {
             logger.debug("Validating token from cookie.");
 
             /// Ensure event have request body
-            if(validate.Property.isExistsKey(event, "cookies").result == false) throw new Error("Cookie not found.");
+            if(validate.Property.isExistsKey(event, "cookies").result != true) throw new Error("Cookie not found.");
 
             /// Parse cookies
             const cookies = await utils.Parser.cookies(event.cookies);
 
             /// Ensure parsing of cookies is successful
-            if(cookies.success == false) throw new Error("Invalid cookie.");
+            if(cookies.success != true) throw new Error("Invalid cookie.");
 
             /// Ensure token is inside cookie parsed
-            if(validate.Property.isExistsKey(cookies.data.parsed, "sessionToken").result == false) throw new Error("Missing session token.");
+            if(validate.Property.isExistsKey(cookies.data.parsed, "sessionToken").result != true) throw new Error("Missing session token.");
 
             /// Ensure token is not empty
             if(validate.String.isEmpty(cookies.data.parsed.sessionToken).result == true) throw new Error("Token cannot be empty.");
@@ -131,7 +131,7 @@ export default class Middleware {
             logger.debug(`Validating body data`);
 
             /// Ensure event body is supplied
-            if(validate.Property.isExistsKey(event, "body").result == false) {
+            if(validate.Property.isExistsKey(event, "body").result != true) {
                 
                 logger.error("Body could not be found inside the event.");
 

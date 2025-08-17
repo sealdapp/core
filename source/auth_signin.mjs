@@ -29,20 +29,20 @@ let storage = {};
 let session;
 
 /// Storage path prefix
-const USERS_PATH_PREFIX = "users";
+const USERS_PATH_PREFIX = "system/users";
 
 await (async function init(){
 
     logger.info("Initializing application...");
 
     /// Ensure root user email is defined
-    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result == false) throw new Error("ROOT_USER not configured.");
+    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result != true) throw new Error("ROOT_USER not configured.");
 
     /// Ensure jwt private key to be used is defined
-    if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result == false) throw new Error("SECRET_JWT_PRIVATE not configured");
+    if(validate.Property.isExistsKey(process.env, "SECRET_JWT_PRIVATE").result != true) throw new Error("SECRET_JWT_PRIVATE not configured");
     
     /// Validate if s3 bucket is defined
-    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
+    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result != true) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
     const plugins = await platform.load();
@@ -77,6 +77,26 @@ await (async function init(){
 
 })()
 
+async function getRootRole() {
+    
+    const role = new schema.Roles({ role : "" });
+
+    async function setAllTrue(obj) {
+        for (const key in obj) {
+            if (typeof obj[key] === "object" && obj[key] !== null) {
+            setAllTrue(obj[key]); // recurse into nested object
+            } else if (typeof obj[key] === "boolean") {
+            obj[key] = true;
+            }
+        }
+        return obj;
+    }
+    
+    const permissions = await setAllTrue(role.permissions);
+
+    return new schema.Roles({ name : "root", permissions })
+}
+
 export const handler = async(event) => {
 
     try {
@@ -84,7 +104,7 @@ export const handler = async(event) => {
         logger.debug(`Signin attempt detected.`)
         
         /// Ensure event have request body
-        if(validate.Property.isExistsKey(event, "body").result == false) return new schema.Response.Auth.Signin({
+        if(validate.Property.isExistsKey(event, "body").result != true) return new schema.Response.Auth.Signin({
             statusCode : 400,
             body : {
                 message : "Bad request"
@@ -95,7 +115,7 @@ export const handler = async(event) => {
         const signed_in = await auth.signin(event.body);
 
         /// Handle exceptions
-        if(signed_in.success == false) return new schema.Response.Auth.Signin({
+        if(signed_in.success != true) return new schema.Response.Auth.Signin({
             statusCode : 400,
             body : {
                 message : signed_in.error.message
@@ -103,7 +123,7 @@ export const handler = async(event) => {
         });
         
         /// Handle invalid authentications
-        if(signed_in.authenticated == false) return new schema.Response.Auth.Signin({
+        if(signed_in.authenticated != true) return new schema.Response.Auth.Signin({
             statusCode : 401,
             body : {
                 retry: signed_in.retry,
@@ -121,11 +141,11 @@ export const handler = async(event) => {
                     auth_type : process.env.AUTH_TYPE,
                     user_id : signed_in.userid,
                     username : signed_in.username,
-                    root : true
+                    role : await getRootRole()
                 })
             });
 
-            if(generateToken.success == false) throw generateToken.error;
+            if(generateToken.success != true) throw generateToken.error;
 
             logger.info(`Root user [${ signed_in.username }] successfully authenticated!`)
             
@@ -152,10 +172,10 @@ export const handler = async(event) => {
             const object = await storage.private.headObject(key);
             
             /// Ensure operation is successful
-            if(object.success == false) throw object.error;
+            if(object.success != true) throw object.error;
             
             /// If there are no key issued for user, throw unauthorized
-            if(object.exists == false) return new schema.Response.Auth.Signin({
+            if(object.exists != true) return new schema.Response.Auth.Signin({
                 statusCode : 403,
                 body : {
                     retry: signed_in.retry,
@@ -171,12 +191,12 @@ export const handler = async(event) => {
                         auth_type : process.env.AUTH_TYPE,
                         user_id : signed_in.userid,
                         username : signed_in.username,
-                        root : false
+                        role : new schema.Roles({ name : "guest" })
                     })
                 });
 
                 //// Ensure that the token generation is successful
-                if(generateToken.success == false) throw generateToken.error;
+                if(generateToken.success != true) throw generateToken.error;
 
                 logger.info(`User [${ signed_in.username }] successfully authenticated!`);
             
@@ -188,6 +208,8 @@ export const handler = async(event) => {
                     ],
                     body : {
                         message : "User successfully authenticated!",
+                        user_id : signed_in.userid,
+                        username : signed_in.username
                     }
                 });
             }

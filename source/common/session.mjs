@@ -24,10 +24,10 @@ export default class Session {
         secret = __secret;
 
         /// Validate if jwt token issuer is defined
-        if(validate.Property.isExistsKey(process.env, "APP_JWT_ISSUER").result == false) throw new Error("APP_JWT_ISSUER is not defined.");
+        if(validate.Property.isExistsKey(process.env, "APP_JWT_ISSUER").result != true) throw new Error("APP_JWT_ISSUER is not defined.");
 
         /// Validate if jwt token expiry configuration is defined
-        if(validate.Property.isExistsKey(process.env, "APP_JWT_TOKEN_EXPIRY").result == false) throw new Error("APP_JWT_TOKEN_EXPIRY is not defined.");
+        if(validate.Property.isExistsKey(process.env, "APP_JWT_TOKEN_EXPIRY").result != true) throw new Error("APP_JWT_TOKEN_EXPIRY is not defined.");
 
         this.#cache = new Cache();
 
@@ -44,7 +44,7 @@ export default class Session {
             const jwt_keys_cached = await this.#cache.getKeys();
 
             /// Ensure caching of jwt public key is successful
-            if(jwt_keys_cached.success == false) throw jwt_keys_cached.error;
+            if(jwt_keys_cached.success != true) throw jwt_keys_cached.error;
 
             return new schema.Operation({
                 success : true
@@ -69,7 +69,7 @@ export default class Session {
             const secret = await this.#cache.getKeys();
 
             /// Ensure retrieval of secret from cache is successful
-            if(secret.success == false) throw secret.error;
+            if(secret.success != true) throw secret.error;
 
             const options = {
                 algorithm: 'RS256',
@@ -114,7 +114,7 @@ export default class Session {
             const secret = await this.#cache.getKeys();
 
             /// Ensure retrieval of secret from cache is successful
-            if(secret.success == false) throw secret.error;
+            if(secret.success != true) throw secret.error;
 
             /// Verify the token
             const payload = jwt.verify(token, secret.data.keyPair.value.public, {
@@ -168,7 +168,7 @@ export default class Session {
             });
 
             /// Ensure key creation is successful
-            if(key.success == false) throw key.error;
+            if(key.success != true) throw key.error;
 
             /// Export private key
             const privateKey = await crypto.Export.rsa({
@@ -178,7 +178,7 @@ export default class Session {
             })
 
             /// Ensure private key was exported successfully
-            if(privateKey.success == false) throw privateKey.error;
+            if(privateKey.success != true) throw privateKey.error;
 
             /// Export public key
             const publicKey = await crypto.Export.rsa({
@@ -188,7 +188,7 @@ export default class Session {
             })
 
             /// Ensure public key was exported succesfully
-            if(publicKey.success == false) throw publicKey.error;
+            if(publicKey.success != true) throw publicKey.error;
 
             /// Upload keys to secrets 
             const uploaded = await secret.set({
@@ -200,7 +200,7 @@ export default class Session {
             });
 
             /// Ensure uploading of keys to secrets is successful
-            if(uploaded.success == false) throw uploaded.error;
+            if(uploaded.success != true) throw uploaded.error;
 
             return new schema.Operation({
                 success : true
@@ -236,7 +236,7 @@ const Cache = class {
                 const retrieved = await this.#downloadJWTKeys();
 
                 /// Ensure retrieval of jwt key was successful
-                if(retrieved.success == false) throw retrieved.error;
+                if(retrieved.success != true) throw retrieved.error;
 
                 logger.debug("Updating local cache.")
                 
@@ -256,7 +256,7 @@ const Cache = class {
                     const retrieved = await this.#downloadJWTKeys();
 
                     /// Ensure retrieval of jwt key was successful
-                    if(retrieved.success == false) throw retrieved.error;
+                    if(retrieved.success != true) throw retrieved.error;
 
                     logger.debug("Updating local cache.")
                     
@@ -297,16 +297,16 @@ const Cache = class {
             })
 
             /// Ensure retrieval of jwt keys is successful
-            if(keys.success == false) throw keys.error;
+            if(keys.success != true) throw keys.error;
 
             /// Ensure that the parameter resource exists
-            if(keys.data.secret.exists == false) throw new Error("Secret resource does not exists.");
+            if(keys.data.secret.exists != true) throw new Error("Secret resource does not exists.");
             
             /// Try to parse downloaded keys
             keyPair = JSON.parse(keys.data.secret.value)
 
             /// Rotate jwt key if value is not in expected format
-            if((await validate.Property.isExistsKeys(keyPair, [ "private", "public" ])).result == false) {
+            if((await validate.Property.isExistsKeys(keyPair, [ "private", "public" ])).result != true) {
 
                 throw new Error("Keys are not a valid value.");
                 

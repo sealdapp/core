@@ -111,7 +111,7 @@ export default class Secret extends Secrets {
              });
              
             /// Ensure that the secret exists
-            if(exists.success == false) throw new Error(`Failed to update the secret. ${ exists.error.message }`);
+            if(exists.success != true) throw new Error(`Failed to update the secret. ${ exists.error.message }`);
 
             logger.debug(`Updating parameter value of [${ name }]`)
 

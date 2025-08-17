@@ -80,6 +80,23 @@ export default class Response {
             }
         }
 
+        static Builtin = class extends Response.Base {
+            
+            constructor({ }) {
+                super({ ...arguments[0] });
+            }
+        }
 
+
+    }
+
+    static Folders = class {
+
+        static Create = class extends Response.Base {
+
+            constructor({ id = "" }) {
+                super({ ...arguments[0] });
+            }
+        }
     }
 }

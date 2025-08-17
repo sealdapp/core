@@ -75,7 +75,7 @@ export default class Crypto {
                 if(validate.Type.isNull(key).result == true) throw new Error("Invalid key.");
 
                 /// Ensure key is exportable
-                if(key.extractable == false) throw new Error ("Key is not extractable.");
+                if(key.extractable != true) throw new Error ("Key is not extractable.");
 
                 if(key.type === "private") structure = "pkcs8";
                     
@@ -142,7 +142,7 @@ export default class Crypto {
                 if(validate.String.isEmpty(data).result == true) throw new Error(`Data supplied is empty.`);
 
                 /// Ensure output is supported format
-                if(validate.String.includes(output, [ "hex", "base64" ]).result == false) throw new Error(`Unsupported output format.`)
+                if(validate.String.includes(output, [ "hex", "base64" ]).result != true) throw new Error(`Unsupported output format.`)
 
                 /// Handle hash digest calculation based on input format
                 switch(format) {

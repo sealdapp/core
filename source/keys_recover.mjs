@@ -29,10 +29,10 @@ await (async function init(){
     logger.info("Initializing application...");
 
     /// Ensure root user email is defined
-    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result == false) throw new Error("ROOT_USER not configured.");
+    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result != true) throw new Error("ROOT_USER not configured.");
     
     /// Validate if s3 bucket is defined
-    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
+    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result != true) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
     const plugins = await platform.load();
@@ -61,7 +61,7 @@ async function prepareUpload(keyObject) {
         })
 
         /// Ensure calculation of digest is successful
-        if(hash.success == false) throw hash.error;
+        if(hash.success != true) throw hash.error;
 
         return new schema.Operation({
             success : true,
@@ -89,13 +89,13 @@ export const handler = async(event) => {
         let keys;
 
         /// Ensure user is root
-        if(token.root == false) return new schema.Response.Keys.Recover({
+        if(token.role.name != "root") return new schema.Response.Keys.Recover({
             statusCode : 401,
             body : { message : "You are not authorized." }
         })
 
         /// Ensure parsed body contains keys
-        if(validate.Property.isExistsKey(body, "keys").result == false) return new schema.Response.Keys.Init({
+        if(validate.Property.isExistsKey(body, "keys").result != true) return new schema.Response.Keys.Init({
             statusCode : 400,
             body : { message : "Missing keys." }
         })
@@ -117,13 +117,13 @@ export const handler = async(event) => {
         }
 
         /// Get recovery key
-        const recovery_key = await storage.private.headObject(`root/recovery-key.json`);
+        const recovery_key = await storage.private.headObject(`system/keys/recovery-key.json`);
 
         /// Ensure recovery key retrieval is successful
-        if(recovery_key.success == false) throw recovery_key.error;
+        if(recovery_key.success != true) throw recovery_key.error;
 
         /// Ensure recovery key doesn't exists yet
-        if(recovery_key.exists == false) return new schema.Response.Keys.Recover({
+        if(recovery_key.exists != true) return new schema.Response.Keys.Recover({
             statusCode : 400,
             body : { message : "Keys not yet initialized." }
         })
@@ -134,27 +134,27 @@ export const handler = async(event) => {
         const wrapped_master = await prepareUpload(keys.master_key);
 
         /// Ensure wrapped_master file is valid
-        if(wrapped_master.success == false) throw wrapped_master.error;
+        if(wrapped_master.success != true) throw wrapped_master.error;
 
         /// Validate root user key
         const root_key = await prepareUpload(keys.root_key);
 
         /// Ensure root user key file is valid
-        if(root_key.success == false) throw root_key.error;
+        if(root_key.success != true) throw root_key.error;
 
         logger.info("All keys supplied are valid. Proceeding with the upload.");
 
         /// Store root user key
-        const root_key_upload = await storage.private.putObject(`root/user-key.json`, root_key.data.content);
+        const root_key_upload = await storage.private.putObject(`system/users/registered/root/user-key.json`, root_key.data.content);
 
         /// Ensure root user key upload is successful
-        if(root_key_upload.success == false) throw root_key_upload.error;
+        if(root_key_upload.success != true) throw root_key_upload.error;
 
         /// Store master key
-        const wrapped_master_upload = await storage.private.putObject(`root/master-key.json`, wrapped_master.data.content);
+        const wrapped_master_upload = await storage.private.putObject(`system/keys/master-key.json`, wrapped_master.data.content);
 
         /// Ensure wrapped_recovery_upload is successful
-        if(wrapped_master_upload.success == false) throw wrapped_master_upload.error;
+        if(wrapped_master_upload.success != true) throw wrapped_master_upload.error;
 
         logger.info(`Keys successfully recovered!`)
 

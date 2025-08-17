@@ -27,7 +27,7 @@ export default class Storage extends Storages {
         logger.debug("Initializing plugin [s3]")
 
         /// Validate if s3 region is defined
-        if(validate.Property.isExistsKey(process.env, "STORAGE_REGION").result == false) throw new Error("STORAGE_REGION is not defined.");
+        if(validate.Property.isExistsKey(process.env, "STORAGE_REGION").result != true) throw new Error("STORAGE_REGION is not defined.");
 
         /// Initialize s3 client
         this.#client = new S3Client({ region : process.env.STORAGE_REGION })
@@ -40,7 +40,7 @@ export default class Storage extends Storages {
 
             logger.debug(`Initializing s3 client.`);
 
-            if(validate.String.isNotEmpty(bucket).result == false) throw new Error("Bucket name is not defined.");
+            if(validate.String.isNotEmpty(bucket).result != true) throw new Error("Bucket name is not defined.");
             logger.debug(`Configuring this instance to use bucket [${ bucket }]`)
 
             this.#bucket = bucket;
@@ -63,7 +63,7 @@ export default class Storage extends Storages {
         try {
 
             /// Ensure key exists
-            if(validate.String.isNotEmpty(key).result == false) throw new Error(`key is not defined.`);
+            if(validate.String.isNotEmpty(key).result != true) throw new Error(`key is not defined.`);
 
             logger.debug(`[${ this.#bucket }] Getting object with key [${ key }]`)
 
@@ -109,7 +109,7 @@ export default class Storage extends Storages {
         try {
 
             /// Ensure key exists
-            if(validate.String.isNotEmpty(key).result == false) throw new Error(`key is not defined.`);
+            if(validate.String.isNotEmpty(key).result != true) throw new Error(`key is not defined.`);
 
             logger.debug(`[${ this.#bucket }] Getting object with key [${ key }]`)
 
@@ -132,7 +132,7 @@ export default class Storage extends Storages {
                 const download = await this.#readableStreamToOutput(response.Body);
 
                 /// Ensure download is successful
-                if(download.success == false) throw download.error;
+                if(download.success != true) throw download.error;
 
                 output = download.data.buffer;
             }
@@ -174,10 +174,10 @@ export default class Storage extends Storages {
         
         try{
             /// Ensure key exists
-            if(validate.String.isNotEmpty(key).result == false) throw new Error(`Key is not defined.`);
+            if(validate.String.isNotEmpty(key).result != true) throw new Error(`Key is not defined.`);
 
             /// Ensure body exists
-            if(validate.Type.isString(body).result == false) throw new Error(`Body is not in string format`);
+            if(validate.Type.isString(body).result != true) throw new Error(`Body is not in string format`);
 
             logger.debug(`[${ this.#bucket }] Putting object with key [${ key }]`)
 

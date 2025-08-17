@@ -27,10 +27,10 @@ await (async function init(){
     logger.info("Initializing application...");
 
     /// Ensure root user email is defined
-    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result == false) throw new Error("ROOT_USER not configured.");
+    if(validate.Property.isExistsKey(process.env, "ROOT_USER").result != true) throw new Error("ROOT_USER not configured.");
     
     /// Validate if s3 bucket is defined
-    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result == false) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
+    if(validate.Property.isExistsKey(process.env, "STORAGE_BUCKET_PRIVATE").result != true) throw new Error("STORAGE_BUCKET_PRIVATE is not defined.");
     
     /// Load all the plugins for the platform
     const plugins = await platform.load();
@@ -55,19 +55,19 @@ export const handler = async(event) => {
         let user_key_path;
 
         /// Set user key path to root user
-        if(token.root) { user_key_path = `root/user-key.json`; }
+        if(token.role.name === "root") { user_key_path = `system/users/registered/root/user-key.json`; }
 
         /// Set user key path to user
-        else { user_key_path = `users/registered/${ token.auth_type }/${ token.user_id }/user-key.json` }
+        else { user_key_path = `system/users/registered/${ token.auth_type }/${ token.user_id }/user-key.json` }
 
         /// Get user key
         const user_key = await storage.private.getObject(user_key_path);
 
         /// Ensure retrieval of user key is successful
-        if(user_key.success == false) throw user_key.error;
+        if(user_key.success != true) throw user_key.error;
 
         /// Return empty user-key if not yet setup
-        if(user_key.exists == false) return new schema.Response.Keys.Get.User({
+        if(user_key.exists != true) return new schema.Response.Keys.Get.User({
             statusCode : 404,
             body : { message : "Key not found." }
         })
@@ -76,7 +76,7 @@ export const handler = async(event) => {
         const key_value = await utils.Parser.bufferToJson(user_key.data);
 
         /// Ensure parsing of user key value is successful
-        if(key_value.success == false) throw key_value.error;
+        if(key_value.success != true) throw key_value.error;
 
         /// Try to load key
         let keyObject;

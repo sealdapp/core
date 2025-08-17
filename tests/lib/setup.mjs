@@ -85,6 +85,8 @@ export default class Setup {
             body : { oauth_token : token }
         })
 
+        console.log(response)
+
         /// Extract session token from cookie
         const match = response.cookies[0].match(/sessionToken=([^;]+)/);
         return match ? match[1] : null;
@@ -256,7 +258,7 @@ export default class Setup {
         /// Wrap device ecnd private key using aes key derived from user password
         const device_ecdh_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
             { name : "AES-GCM", iv: device_ecdh_iv },
-            password_wk,   
+            device_secret,   
             await crypto.subtle.exportKey("pkcs8", device_ecdh.privateKey)
         )).toString("base64");
 
@@ -280,9 +282,38 @@ export default class Setup {
         /// Wrap device ecnd private key using aes key derived from user password
         const device_ecdsa_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
             { name : "AES-GCM", iv: device_ecdsa_iv },
-            password_wk,   
+            device_secret,   
             await crypto.subtle.exportKey("pkcs8", device_ecdsa.privateKey)
         )).toString("base64");
+
+
+        
+        const device_rsa = await crypto.subtle.generateKey(
+            {
+                name: 'RSA-OAEP',
+                modulusLength: 4096,
+                publicExponent: new Uint8Array([ 1, 0, 1 ]), // 65537
+                hash: "SHA-256",
+            },
+            true,
+            [ 'encrypt', 'decrypt' ]
+        );
+
+        /// Generate a random IV value
+        const device_rsa_iv = crypto.getRandomValues(new Uint8Array(12));
+
+        /// Export master public key
+        const device_rsa_public = Buffer.from(await crypto.subtle.exportKey("spki", device_rsa.publicKey)).toString("base64");
+
+        /// Wrap device rsa private key using aes device key
+        const device_rsa_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: device_rsa_iv },
+            device_secret,   
+            await crypto.subtle.exportKey("pkcs8", device_rsa.privateKey)
+        )).toString("base64");
+
+
+
 
         return {
 
@@ -353,10 +384,27 @@ export default class Setup {
                     timestamp : Date.now()
                 },
                 keys : {
-                    aes : {
-                        value : device_secret_wrapped,
-                        iv : Buffer.from(device_secret_iv).toString("base64"),
-                        wrapper : "this.userKey.pbkdf2"
+                    rsa : {
+                        publicKey : {
+                            algorithm : {
+                                name : device_rsa.publicKey.algorithm.name,
+                                modulusLength : device_rsa.publicKey.algorithm.modulusLength,
+                                hash : device_rsa.publicKey.algorithm.hash
+                            },
+                            usages : device_rsa.publicKey.usages,
+                            value : device_rsa_public
+                        },
+                        privateKey : {
+                            algorithm : {
+                                name : device_rsa.publicKey.algorithm.name,
+                                modulusLength : device_rsa.publicKey.algorithm.modulusLength,
+                                hash : device_rsa.publicKey.algorithm.hash
+                            },
+                            usages : device_rsa.privateKey.usages,
+                            value : device_rsa_private_wrapped,
+                            iv : Buffer.from(device_rsa_iv).toString("base64"),
+                            wrapper : "root.deviceKey.aes"
+                        }
                     },
                     ecdh : {
                         publicKey : {
@@ -375,7 +423,7 @@ export default class Setup {
                             usages : device_ecdh.privateKey.usages,
                             value : device_ecdh_private_wrapped,
                             iv : Buffer.from(device_ecdh_iv).toString("base64"),
-                            wrapper : "this.userKey.pbkdf2"
+                            wrapper : "this.userKey.aes"
                         }
                     },
                     ecdsa : {
@@ -395,9 +443,14 @@ export default class Setup {
                             usages : device_ecdsa.privateKey.usages,
                             value : device_ecdsa_private_wrapped,
                             iv : Buffer.from(device_ecdsa_iv).toString("base64"),
-                            wrapper : "this.userKey.pbkdf2"
+                            wrapper : "this.userKey.aes"
                         }
 
+                    },
+                    aes : {
+                        value : device_secret_wrapped,
+                        iv : Buffer.from(device_secret_iv).toString("base64"),
+                        wrapper : "this.userKey.pbkdf2"
                     },
                     pbkdf2 : {
                         algorithm : {
