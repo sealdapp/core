@@ -54,7 +54,7 @@ export default class Request {
 
                 /// Extract metadata information from token
                 let metadata = {
-                    issuer : token.username,
+                    issuer : token.user_id,
                     issuedFor : token.iss,
                     role : token.role.name
                 }
@@ -100,6 +100,26 @@ export default class Request {
     }
 
     static Folders = class {
+
+        static Activate = class {
+            
+            constructor({ type = "" }) {
+                const validate = new Validator();
+                
+                /// Ensure folder type is supplied
+                if(validate.String.isNotEmpty(type).result != true) throw new Error("Missing folder type.")
+
+                /// Ensure folder type is valid
+                if(validate.List.isStringInside([
+                    "files",
+                    "gallery"
+                ], type).result != true) throw new Error("Invalid folder type.")
+                
+                this.type = type.toLocaleLowerCase();
+            }
+
+        }
+
         static Create = class {
 
             constructor({ id = "", type = "", properties = "", folderKey = {}, authorized_keys = [], token }) {

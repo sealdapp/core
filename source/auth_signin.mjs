@@ -110,7 +110,6 @@ export const handler = async(event) => {
                 message : "Bad request"
             }
         })
-
         /// Pass event body to authenticator signin method
         const signed_in = await auth.signin(event.body);
 
@@ -131,38 +130,14 @@ export const handler = async(event) => {
             }
         })
 
+        /// Set role
+        let role = new schema.Roles({ name : "guest" });
 
-        /// Handle authorization check for root
-        if(process.env.ROOT_USER.toLowerCase() === signed_in.username) {
+        /// Set root role if user is root and 
+        // skip checking of existing user key on an event the application haven't started up yet
+        if(process.env.ROOT_USER.toLowerCase() === signed_in.username) role = await getRootRole();
 
-            /// Skip authorization check if the user logged in is the root user
-            const generateToken = await session.generate_token({ 
-                payload : new schema.Authentication.Token.Payload({
-                    auth_type : process.env.AUTH_TYPE,
-                    user_id : signed_in.userid,
-                    username : signed_in.username,
-                    role : await getRootRole()
-                })
-            });
-
-            if(generateToken.success != true) throw generateToken.error;
-
-            logger.info(`Root user [${ signed_in.username }] successfully authenticated!`)
-            
-            return new schema.Response.Auth.Signin({ 
-                statusCode : 200,
-                headers : { 'Content-Type': 'text/plain' },
-                cookies: [
-                    `sessionToken=${ generateToken.data.token }; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax`
-                ],
-                body : {
-                    message : "User successfully authenticated!",
-                }
-            });
-        }
-
-        /// Handle authorization check for user
-        /// Check if there are keys generated for users
+        /// Otherwise, ensure that a user key has been provisioned for the user
         else{
 
             /// Draft the expected path of the key
@@ -182,38 +157,36 @@ export const handler = async(event) => {
                     message : "You are not authorized."
                 }
             })
-            
-            /// Otherwise, return success
-            else {
-                /// Generate a new token for standard user
-                const generateToken = await session.generate_token({ 
-                    payload : new schema.Authentication.Token.Payload({
-                        auth_type : process.env.AUTH_TYPE,
-                        user_id : signed_in.userid,
-                        username : signed_in.username,
-                        role : new schema.Roles({ name : "guest" })
-                    })
-                });
-
-                //// Ensure that the token generation is successful
-                if(generateToken.success != true) throw generateToken.error;
-
-                logger.info(`User [${ signed_in.username }] successfully authenticated!`);
-            
-                return new schema.Response.Auth.Signin({ 
-                    statusCode : 200,
-                    headers : { 'Content-Type': 'text/plain' },
-                    cookies: [
-                        `sessionToken=${ generateToken.data.token }; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax`
-                    ],
-                    body : {
-                        message : "User successfully authenticated!",
-                        user_id : signed_in.userid,
-                        username : signed_in.username
-                    }
-                });
-            }
         }
+
+
+        /// Generate a new token for standard user
+        const generateToken = await session.generate_token({ 
+            payload : new schema.Authentication.Token.Payload({
+                auth_type : process.env.AUTH_TYPE,
+                user_id : signed_in.userid,
+                username : signed_in.username,
+                role : role
+            })
+        });
+
+        //// Ensure that the token generation is successful
+        if(generateToken.success != true) throw generateToken.error;
+
+        logger.info(`User [${ signed_in.username }] successfully authenticated!`);
+    
+        return new schema.Response.Auth.Signin({ 
+            statusCode : 200,
+            headers : { 'Content-Type': 'text/plain' },
+            cookies: [
+                `sessionToken=${ generateToken.data.token }; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax`
+            ],
+            body : {
+                message : "User successfully authenticated!",
+                user_id : signed_in.userid,
+                username : signed_in.username
+            }
+        });
     }
 
     catch(e) {

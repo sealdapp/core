@@ -4,6 +4,7 @@
 import dotenv from "dotenv";
 import axios from "axios";
 import crypto, { pbkdf2 } from "crypto";
+import Common from "./common.mjs";
 
 let env_files = [ 
     '../dev/.env.common',
@@ -26,6 +27,10 @@ export default class Setup {
     APP_TOKEN_ROOT;
     APP_TOKEN_USER;
 
+    /// Test application user's id
+    APP_ID_ROOT;
+    APP_ID_USER;
+
     /// Dummy tokens
     DUMMY_TOKEN_INVALID;
     DUMMY_TOKEN_EXPIRED;
@@ -40,8 +45,13 @@ export default class Setup {
         this.TOKEN_UNAUTHORIZED = await this.getIdToken(process.env.EMAIL3, process.env.PASSW3);
 
         /// Application generated session tokens
-        this.APP_TOKEN_ROOT = await this.getSessionToken(this.TOKEN_ROOT);
-        this.APP_TOKEN_USER = await this.getSessionToken(this.TOKEN_USER);
+        const root = await this.getSessionToken(this.TOKEN_ROOT);
+        this.APP_TOKEN_ROOT = root.token;
+        this.APP_ID_ROOT = root.id;
+
+        const user = await this.getSessionToken(this.TOKEN_USER);
+        this.APP_TOKEN_USER = user.token;
+        this.APP_ID_USER = user.id;
     }
 
     async getSectionTitle(type) {
@@ -85,11 +95,14 @@ export default class Setup {
             body : { oauth_token : token }
         })
 
-        console.log(response)
+        const data = JSON.parse(response.body);
 
         /// Extract session token from cookie
         const match = response.cookies[0].match(/sessionToken=([^;]+)/);
-        return match ? match[1] : null;
+        return {
+            token : match ? match[1] : null,
+            id : data.user_id
+        }
     }
 
     async getTokens() {
@@ -110,64 +123,10 @@ export default class Setup {
         }
     }
 
+    async createFolder({ name, description, type }){
 
-    async getSampleKeys() {
-
-        /// Generate master key
-        const master = await crypto.subtle.generateKey(
-            {
-                name: 'RSA-OAEP',
-                modulusLength: 4096,
-                publicExponent: new Uint8Array([ 1, 0, 1 ]), // 65537
-                hash: "SHA-256",
-            },
-            true,
-            [ 'encrypt', 'decrypt' ]
-        );
-        
-        /// Export master public key
-        const master_public = Buffer.from(await crypto.subtle.exportKey("spki", master.publicKey)).toString("base64");
-
-        /// Generate a random IV value
-        const master_password_iv = crypto.getRandomValues(new Uint8Array(12));
-
-
-
-        /// Generate random password
-        const password = crypto.randomBytes(10).toString('hex'); 
-
-        /// Generate random salt for password
-        const password_salt = crypto.getRandomValues(new Uint8Array(16));
-
-        /// Import password key material
-        const password_km = await crypto.subtle.importKey(
-            'raw',
-            (new TextEncoder()).encode(password),
-            { name : "PBKDF2"},
-            false,
-            [ 'deriveKey' ]
-        );
-        
-        /// Derive wrapping key from password key
-        const password_wk = await crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: password_salt,
-                iterations: 100_000,
-                hash: 'SHA-256',
-            },
-            password_km,
-            {
-                name: 'AES-GCM',
-                length: 256,
-            },
-            true,
-            [ 'encrypt', 'decrypt' ]
-        );
-
-
-        /// Generate device secret
-        const device_secret = await crypto.subtle.generateKey(
+        /// Generate folder wrapping secret
+        const folder_key = await crypto.subtle.generateKey(
             {
                 name: "AES-GCM",
                 length: 256
@@ -176,119 +135,12 @@ export default class Setup {
             ["encrypt", "decrypt"]
         );
 
-        /// Generate a random IV value
-        const device_secret_iv = crypto.getRandomValues(new Uint8Array(12));
-
-
-        /// Wrap master key using wrapping key derived from password key
-        const master_wrapped = Buffer.from(await crypto.subtle.encrypt(
-            { name : "AES-GCM", iv: master_password_iv },
-            device_secret,   
-            await crypto.subtle.exportKey("pkcs8", master.privateKey)
-        )).toString("base64");
-
-        /// Wrap device secret using derived password
-        const device_secret_wrapped = Buffer.from(await crypto.subtle.encrypt(
-            { name : "AES-GCM", iv: device_secret_iv },
-            password_wk,   
-            await crypto.subtle.exportKey("raw", device_secret)
-        )).toString("base64");
-
-
-        /// Generate recovery key
-        const recovery = crypto.randomBytes(16).toString('hex'); 
-
-        /// Generate random salt for password
-        const recovery_salt = crypto.getRandomValues(new Uint8Array(16));
+        /// Generate folder wrapping secret iv
+        const folder_iv = crypto.getRandomValues(new Uint8Array(12));
         
-        /// Import recovery key material
-        const recovery_km = await crypto.subtle.importKey(
-            'raw',
-            (new TextEncoder()).encode(recovery),
-            'PBKDF2',
-            false,
-            ['deriveKey']
-        );
 
-        /// Derive wrapping key from recovery key material
-        const recovery_wk = await crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: recovery_salt,
-                iterations: 100_000,
-                hash: 'SHA-256',
-            },
-            recovery_km,
-            {
-                name: 'AES-GCM',
-                length: 256,
-            },
-            true,
-            [ 'encrypt', 'decrypt' ]
-        );
-
-        /// Generate a random IV value
-        const master_recovery_iv = crypto.getRandomValues(new Uint8Array(12));
-
-        /// Wrap master key using wrapping key derived from recovery key
-        const master_recovery_wrapped = Buffer.from(await crypto.subtle.encrypt(
-            { name : "AES-GCM", iv: master_recovery_iv },
-            recovery_wk,   
-            await crypto.subtle.exportKey("pkcs8", master.privateKey)
-        )).toString("base64");
-
-
-
-
-        /** OTHER Device key */
-        const device_ecdh = await crypto.subtle.generateKey(
-            {
-                name: "ECDH",
-                namedCurve: "P-256", 
-            },
-            true, // extractable
-            [ "deriveKey", "deriveBits" ]
-        );
-        /// Generate a random IV value
-        const device_ecdh_iv = crypto.getRandomValues(new Uint8Array(12));
-
-        /// Export device ecdh public key into base64 format
-        const device_ecdh_public = Buffer.from(await crypto.subtle.exportKey("raw", device_ecdh.publicKey)).toString("base64");
-
-        /// Wrap device ecnd private key using aes key derived from user password
-        const device_ecdh_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
-            { name : "AES-GCM", iv: device_ecdh_iv },
-            device_secret,   
-            await crypto.subtle.exportKey("pkcs8", device_ecdh.privateKey)
-        )).toString("base64");
-
-        
-        const device_ecdsa = await crypto.subtle.generateKey(
-            {
-                name: "ECDSA",
-                namedCurve: "P-256", // Also valid: P-384, P-521
-            },
-            true,
-            ["sign", "verify"]
-        );
-
-        /// Generate a random IV value
-        const device_ecdsa_iv = crypto.getRandomValues(new Uint8Array(12));
-
-        /// Export device ecdh public key into base64 format
-        const device_ecdsa_public = Buffer.from(await crypto.subtle.exportKey("raw", device_ecdsa.publicKey)).toString("base64");
-
-
-        /// Wrap device ecnd private key using aes key derived from user password
-        const device_ecdsa_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
-            { name : "AES-GCM", iv: device_ecdsa_iv },
-            device_secret,   
-            await crypto.subtle.exportKey("pkcs8", device_ecdsa.privateKey)
-        )).toString("base64");
-
-
-        
-        const device_rsa = await crypto.subtle.generateKey(
+        /// Generage folder key
+        const folder_rsa = await crypto.subtle.generateKey(
             {
                 name: 'RSA-OAEP',
                 modulusLength: 4096,
@@ -299,87 +151,86 @@ export default class Setup {
             [ 'encrypt', 'decrypt' ]
         );
 
-        /// Generate a random IV value
-        const device_rsa_iv = crypto.getRandomValues(new Uint8Array(12));
+        /// Export folder key public key
+        const folder_rsa_public = Buffer.from(await crypto.subtle.exportKey("spki", folder_rsa.publicKey)).toString("base64");
 
-        /// Export master public key
-        const device_rsa_public = Buffer.from(await crypto.subtle.exportKey("spki", device_rsa.publicKey)).toString("base64");
-
-        /// Wrap device rsa private key using aes device key
-        const device_rsa_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
-            { name : "AES-GCM", iv: device_rsa_iv },
-            device_secret,   
-            await crypto.subtle.exportKey("pkcs8", device_rsa.privateKey)
+        /// Wrap folder key private key using folder wrapping secret
+        const folder_rsa_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: folder_iv },
+            folder_key,   
+            await crypto.subtle.exportKey("pkcs8", folder_rsa.privateKey)
         )).toString("base64");
 
+        /// Generate folder signing key
+        const folder_ecdsa = await crypto.subtle.generateKey(
+            {
+                name: "ECDSA",
+                namedCurve: "P-256", // Also valid: P-384, P-521
+            },
+            true,
+            ["sign", "verify"]
+        );
 
+        /// Export device ecdh public key into base64 format
+        const folder_ecdsa_public = Buffer.from(await crypto.subtle.exportKey("raw", folder_ecdsa.publicKey)).toString("base64");
 
+        /// Wrap device ecnd private key using aes key derived from user password
+        const folder_ecdsa_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: folder_iv },
+            folder_key,   
+            await crypto.subtle.exportKey("pkcs8", folder_ecdsa.privateKey)
+        )).toString("base64");
 
+        /// Get folder name
+        const folder_name = await encrypt(name)
+
+        /// Generate properties file
+        const properties = {
+            name : folder_name,
+            description : await encrypt(description),
+            type : type
+        }
+
+        async function encrypt(data){
+            return Buffer.from(await crypto.subtle.encrypt(
+                { name : folder_key.algorithm.name, iv : folder_iv },
+                folder_key,
+                new TextEncoder().encode(data)
+            )).toString("base64")
+        }
+
+        async function getWrappedKey(key) {
+
+            /// Parse builtin master public key
+            let buffer_master = Buffer.from(key.value, "base64");
+            buffer_master = buffer_master.buffer.slice(buffer_master.byteOffset, buffer_master.byteOffset + buffer_master.byteLength);
+
+            /// Import builtin master public key material
+            const public_km = await crypto.subtle.importKey(
+                "spki",
+                buffer_master,
+                key.algorithm,
+                false,
+                key.usages
+            )
+
+            /// Encrypt new folder key with master key
+            return Buffer.from(await crypto.subtle.encrypt(
+                { name : key.algorithm.name },
+                public_km,
+                await crypto.subtle.exportKey("raw", folder_key)
+            )).toString("base64");
+        }
+
+        const folder_master_wrapped = await getWrappedKey(builtin_keys.master);
+        const folder_root_wrapped = await getWrappedKey(builtin_keys.root);
+        
         return {
-
-            master_key : {
-                info : {
-                    type : "masterKey",
-                    version : 1,
-                    timestamp : Date.now()
-                },
-                keys : {
-                    rsa : {
-                        publicKey : {
-                            algorithm : {
-                                name : master.publicKey.algorithm.name,
-                                modulusLength : master.publicKey.algorithm.modulusLength,
-                                hash : master.publicKey.algorithm.hash
-                            },
-                            usages : master.publicKey.usages,
-                            value : master_public
-                        },
-                        privateKey : {
-                            algorithm : {
-                                name : master.publicKey.algorithm.name,
-                                modulusLength : master.publicKey.algorithm.modulusLength,
-                                hash : master.publicKey.algorithm.hash
-                            },
-                            usages : master.privateKey.usages,
-                            value : master_wrapped,
-                            iv : Buffer.from(master_password_iv).toString("base64"),
-                            wrapper : "root.deviceKey.aes"
-                        }
-                    }
-                }
-            },
-
-            recovery_key : {
-                info : {
-                    type : "recoveryKey",
-                    version : 1,
-                    timestamp : Date.now()
-                },
-                keys : {
-                    aes : {
-                        value : master_recovery_wrapped,
-                        iv : Buffer.from(master_recovery_iv).toString("base64"),
-                        wrapper : "this.recoveryKey.pbkdf2"
-                    },
-                    pbkdf2 : {
-                        algorithm : {
-                            name: 'PBKDF2',
-                            salt : Buffer.from(recovery_salt).toString("base64"),
-                            iterations: 100_000,
-                            hash: 'SHA-256'
-                        },
-                        derivedAlgorithm : {
-                            name : recovery_wk.algorithm.name,
-                            length : recovery_wk.algorithm.length
-                        },
-                        usages : recovery_wk.usages,
-                    }
-                }
-            },
             
-            root_key : {
+            /// Folder wrapped with master key
+            folderKey : {
                 info : {
-                    type : "userKey",
+                    type : "folderKey",
                     version : 1,
                     timestamp : Date.now()
                 },
@@ -387,86 +238,502 @@ export default class Setup {
                     rsa : {
                         publicKey : {
                             algorithm : {
-                                name : device_rsa.publicKey.algorithm.name,
-                                modulusLength : device_rsa.publicKey.algorithm.modulusLength,
-                                hash : device_rsa.publicKey.algorithm.hash
+                                name : folder_rsa.publicKey.algorithm.name,
+                                modulusLength : folder_rsa.publicKey.algorithm.modulusLength,
+                                hash : folder_rsa.publicKey.algorithm.hash
                             },
-                            usages : device_rsa.publicKey.usages,
-                            value : device_rsa_public
+                            usages : folder_rsa.publicKey.usages,
+                            value : folder_rsa_public
                         },
                         privateKey : {
                             algorithm : {
-                                name : device_rsa.publicKey.algorithm.name,
-                                modulusLength : device_rsa.publicKey.algorithm.modulusLength,
-                                hash : device_rsa.publicKey.algorithm.hash
+                                name : folder_rsa.publicKey.algorithm.name,
+                                modulusLength : folder_rsa.publicKey.algorithm.modulusLength,
+                                hash : folder_rsa.publicKey.algorithm.hash
                             },
-                            usages : device_rsa.privateKey.usages,
-                            value : device_rsa_private_wrapped,
-                            iv : Buffer.from(device_rsa_iv).toString("base64"),
-                            wrapper : "root.deviceKey.aes"
-                        }
-                    },
-                    ecdh : {
-                        publicKey : {
-                            algorithm : {
-                                name : device_ecdh.publicKey.algorithm.name,
-                                namedCurve : device_ecdh.publicKey.algorithm.namedCurve
-                            },
-                            usages : device_ecdh.publicKey.usages,
-                            value : device_ecdh_public
-                        },
-                        privateKey : {
-                            algorithm : {
-                                name : device_ecdh.privateKey.algorithm.name,
-                                namedCurve : device_ecdh.privateKey.algorithm.namedCurve
-                            },
-                            usages : device_ecdh.privateKey.usages,
-                            value : device_ecdh_private_wrapped,
-                            iv : Buffer.from(device_ecdh_iv).toString("base64"),
-                            wrapper : "this.userKey.aes"
+                            usages : folder_rsa.privateKey.usages,
+                            value : folder_rsa_private_wrapped,
+                            iv : Buffer.from(folder_iv).toString("base64"),
+                            wrapper : `this.folderKey.secret`
                         }
                     },
                     ecdsa : {
                         publicKey : {
                             algorithm : {
-                                name : device_ecdsa.publicKey.algorithm.name,
-                                namedCurve : device_ecdsa.publicKey.algorithm.namedCurve
+                                name : folder_ecdsa.publicKey.algorithm.name,
+                                namedCurve : folder_ecdsa.publicKey.algorithm.namedCurve
                             },
-                            usages : device_ecdsa.publicKey.usages,
-                            value : device_ecdsa_public
+                            usages : folder_ecdsa.publicKey.usages,
+                            value : folder_ecdsa_public
                         },
                         privateKey : {
                             algorithm : {
-                                name : device_ecdsa.privateKey.algorithm.name,
-                                namedCurve : device_ecdsa.privateKey.algorithm.namedCurve
+                                name : folder_ecdsa.privateKey.algorithm.name,
+                                namedCurve : folder_ecdsa.privateKey.algorithm.namedCurve
                             },
-                            usages : device_ecdsa.privateKey.usages,
-                            value : device_ecdsa_private_wrapped,
-                            iv : Buffer.from(device_ecdsa_iv).toString("base64"),
-                            wrapper : "this.userKey.aes"
+                            usages : folder_ecdsa.privateKey.usages,
+                            value : folder_ecdsa_private_wrapped,
+                            iv : Buffer.from(folder_iv).toString("base64"),
+                            wrapper : `this.folderKey.secret`
                         }
 
                     },
-                    aes : {
-                        value : device_secret_wrapped,
-                        iv : Buffer.from(device_secret_iv).toString("base64"),
-                        wrapper : "this.userKey.pbkdf2"
+                    secret : {
+                        value : folder_master_wrapped,
+                        iv : Buffer.from(folder_iv).toString("base64"),
+                        wrapper : "masterKey.rsa.public"
                     },
-                    pbkdf2 : {
-                        algorithm : {
-                            name: 'PBKDF2',
-                            salt : Buffer.from(password_salt).toString("base64"),
-                            iterations: 100_000,
-                            hash: 'SHA-256'
+                }
+            },
+
+            /// Folder wrapped with root key
+            authorized_keys : [
+                {
+                    info : {
+                        type : "folderKey",
+                        version : 1,
+                        timestamp : Date.now()
+                    },
+                    keys : {
+                        secret : {
+                            value : folder_root_wrapped,
+                            iv : Buffer.from(folder_iv).toString("base64"),
+                            wrapper : `root.userKey.rsa.public`
                         },
-                        derivedAlgorithm : {
-                            name : recovery_wk.algorithm.name,
-                            length : recovery_wk.algorithm.length
-                        },
-                        usages : recovery_wk.usages
                     }
+                }
+            ]
+        }
+    }
+
+
+    async getSampleKeys() {
+
+        /**
+         * PASSWORD AND RECOVERY PHRASE
+         */
+        /// Generate random password
+        const password_value = await Common.Keys.GenerateRandomHex(10);
+
+        /// Generate random salt for password
+        const password_salt = await Common.Keys.GenerateRandomBytes(16);
+
+        /// Generate key material from password value and salt
+        const password = await Common.Keys.CreatePasswordKey(password_value, password_salt)
+
+        /// Generate random recovery phrase
+        const passphrase_value = await Common.Keys.GenerateRandomHex(32);
+
+        /// Generate random salt for recovery phrase
+        const passphrase_salt = await Common.Keys.GenerateRandomBytes(16);
+
+        /// Generate key material from recovery phrase and salt
+        const passphrase = await Common.Keys.CreatePasswordKey(passphrase_value, passphrase_salt)
+
+
+
+        /**
+         * USER KEY
+         */
+        /// Generate user key encryption key
+        const user_kek = await Common.Keys.CreateWrappingKey(password.key);
+
+        /// Generate user secret
+        const user_secret = await Common.Keys.CreateWrappedAES(user_kek.key);
+
+        /// Generate user rsa keys
+        const user_rsa = await Common.Keys.CreateWrappedRSA(user_kek.key);
+
+        /// Generate user ecdh keys
+        const user_ecdh = await Common.Keys.CreateWrappedECDH(user_kek.key);
+
+        /// Generate user ecdsa keys
+        const user_ecdsa = await Common.Keys.CreateWrappedECDSA(user_kek.key);
+
+        /**
+         * RECOVERY KEY
+         */
+        /// Generate recovery key key encryption key
+        const recovery_kek = await Common.Keys.CreateWrappingKey(passphrase.key);
+
+        /// Generate recovery secret
+        const recovery_secret = await Common.Keys.CreateWrappedAES(recovery_kek.key);
+
+        /// Generate recovery rsa keys
+        const recovery_rsa = await Common.Keys.CreateWrappedRSA(recovery_kek.key);
+
+        /// Generate recovery ecdh keys
+        const recovery_ecdh = await Common.Keys.CreateWrappedECDH(recovery_kek.key);
+
+        /// Generate recovery ecdsa keys
+        const recovery_ecdsa = await Common.Keys.CreateWrappedECDSA(recovery_kek.key);
+
+
+
+        /**
+         * KEYCHAINS
+         */
+        /// Recovery keychain
+        const recovery_key = {
+            info : {
+                type : "recoveryKey",
+                version : 1,
+                timestamp : Date.now()
+            },
+            keys : {
+                cipher: {
+                    publicKey : {
+                        algorithm : {
+                            name : recovery_rsa.key.publicKey.algorithm.name,
+                            modulusLength : recovery_rsa.key.publicKey.algorithm.modulusLength,
+                            hash : recovery_rsa.key.publicKey.algorithm.hash
+                        },
+                        usages : recovery_rsa.key.publicKey.usages,
+                        value : recovery_rsa.rsa_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : recovery_rsa.key.publicKey.algorithm.name,
+                            modulusLength : recovery_rsa.key.publicKey.algorithm.modulusLength,
+                            hash : recovery_rsa.key.publicKey.algorithm.hash
+                        },
+                        usages : recovery_rsa.key.privateKey.usages,
+                        value : recovery_rsa.rsa_private_wrapped,
+                        iv : Buffer.from(recovery_rsa.iv).toString("base64"),
+                        wrapper : `root.recoveryKey.kek`
+                    }
+                },
+
+                signing : {
+                    publicKey : {
+                        algorithm : {
+                            name : recovery_ecdsa.key.publicKey.algorithm.name,
+                            namedCurve : recovery_ecdsa.key.publicKey.algorithm.namedCurve
+                        },
+                        usages : recovery_ecdsa.key.publicKey.usages,
+                        value : recovery_ecdsa.ecdsa_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : recovery_ecdsa.key.privateKey.algorithm.name,
+                            namedCurve : recovery_ecdsa.key.privateKey.algorithm.namedCurve
+                        },
+                        usages : recovery_ecdsa.key.privateKey.usages,
+                        value : recovery_ecdsa.ecdsa_private_wrapped,
+                        iv : Buffer.from(recovery_ecdsa.iv).toString("base64"),
+                        wrapper : `root.recoveryKey.kek`
+                    }
+                },
+
+                exchange : {
+                    publicKey : {
+                        algorithm : {
+                            name : recovery_ecdh.key.publicKey.algorithm.name,
+                            namedCurve : recovery_ecdh.key.publicKey.algorithm.namedCurve
+                        },
+                        usages : recovery_ecdh.key.publicKey.usages,
+                        value : recovery_ecdh.ecdh_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : recovery_ecdh.key.privateKey.algorithm.name,
+                            namedCurve : recovery_ecdh.key.privateKey.algorithm.namedCurve
+                        },
+                        usages : recovery_ecdh.key.privateKey.usages,
+                        value : recovery_ecdh.ecdh_private_wrapped,
+                        iv : Buffer.from(recovery_ecdh.iv).toString("base64"),
+                        wrapper : `root.recoveryKey.kek`
+                    }
+
+                },
+
+                secret : {
+                    value : recovery_secret.wrapped,
+                    iv : Buffer.from(recovery_secret.iv).toString("base64"),
+                    wrapper : `root.recoveryKey.kek`
+                },
+
+                kek : {
+                    value : recovery_kek.wrapped,
+                    iv : Buffer.from(recovery_kek.iv).toString("base64"),
+                    wrapper : `root.recoveryKey.passphrase`
+                },
+
+                passphrase : {
+                    algorithm : {
+                        name: 'PBKDF2',
+                        salt : Buffer.from(passphrase_salt).toString("base64"),
+                        iterations: 100_000,
+                        hash: 'SHA-256'
+                    },
+                    derivedAlgorithm : {
+                        name : passphrase.key.algorithm.name,
+                        length : passphrase.key.algorithm.length
+                    },
+                    usages : passphrase.key.usages,
                 }
             }
         }
+
+        /// User keychain
+        const user_key = {
+            info : {
+                type : "userKey",
+                version : 1,
+                timestamp : Date.now()
+            },
+            keys : {
+                cipher: {
+                    publicKey : {
+                        algorithm : {
+                            name : user_rsa.key.publicKey.algorithm.name,
+                            modulusLength : user_rsa.key.publicKey.algorithm.modulusLength,
+                            hash : user_rsa.key.publicKey.algorithm.hash
+                        },
+                        usages : user_rsa.key.publicKey.usages,
+                        value : user_rsa.rsa_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : user_rsa.key.publicKey.algorithm.name,
+                            modulusLength : user_rsa.key.publicKey.algorithm.modulusLength,
+                            hash : user_rsa.key.publicKey.algorithm.hash
+                        },
+                        usages : user_rsa.key.privateKey.usages,
+                        value : user_rsa.rsa_private_wrapped,
+                        iv : Buffer.from(user_rsa.iv).toString("base64"),
+                        wrapper : `${ this.APP_ID_ROOT }.userKey.kek`
+                    }
+                },
+
+                signing : {
+                    publicKey : {
+                        algorithm : {
+                            name : user_ecdsa.key.publicKey.algorithm.name,
+                            namedCurve : user_ecdsa.key.publicKey.algorithm.namedCurve
+                        },
+                        usages : user_ecdsa.key.publicKey.usages,
+                        value : user_ecdsa.ecdsa_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : user_ecdsa.key.privateKey.algorithm.name,
+                            namedCurve : user_ecdsa.key.privateKey.algorithm.namedCurve
+                        },
+                        usages : user_ecdsa.key.privateKey.usages,
+                        value : user_ecdsa.ecdsa_private_wrapped,
+                        iv : Buffer.from(user_ecdsa.iv).toString("base64"),
+                        wrapper : `${ this.APP_ID_ROOT }.userKey.kek`
+                    }
+                },
+
+                exchange : {
+                    publicKey : {
+                        algorithm : {
+                            name : user_ecdh.key.publicKey.algorithm.name,
+                            namedCurve : user_ecdh.key.publicKey.algorithm.namedCurve
+                        },
+                        usages : user_ecdh.key.publicKey.usages,
+                        value : user_ecdh.ecdh_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : user_ecdh.key.privateKey.algorithm.name,
+                            namedCurve : user_ecdh.key.privateKey.algorithm.namedCurve
+                        },
+                        usages : user_ecdh.key.privateKey.usages,
+                        value : user_ecdh.ecdh_private_wrapped,
+                        iv : Buffer.from(user_ecdh.iv).toString("base64"),
+                        wrapper : `${ this.APP_ID_ROOT }.userKey.kek`
+                    }
+
+                },
+
+                secret : {
+                    value : user_secret.wrapped,
+                    iv : Buffer.from(user_secret.iv).toString("base64"),
+                    wrapper : `${ this.APP_ID_ROOT }.userKey.kek`
+                },
+
+                kek : {
+                    value : user_kek.wrapped,
+                    iv : Buffer.from(user_kek.iv).toString("base64"),
+                    wrapper : `${ this.APP_ID_ROOT }.userKey.password`
+                },
+
+                password : {
+                    algorithm : {
+                        name: 'PBKDF2',
+                        salt : Buffer.from(password_salt).toString("base64"),
+                        iterations: 100_000,
+                        hash: 'SHA-256'
+                    },
+                    derivedAlgorithm : {
+                        name : password.key.algorithm.name,
+                        length : password.key.algorithm.length
+                    },
+                    usages : password.key.usages,
+                }
+            },
+            properties : {
+                payload : {
+                    authorization: {
+                        roles : [ "root" ]
+                    }
+                },
+                signature : ""
+            }
+        }
+        
+        /**
+         * FOLDER KEYS
+         */
+        /// Generate folder_usrmgr key key encryption key
+        const folder_usrmgr_kek = await Common.Keys.CreateFolderWrappingKey(user_key.keys.cipher.publicKey);
+
+        /// Generate folder_usrmgr secret
+        const folder_usrmgr_secret = await Common.Keys.CreateWrappedAES(folder_usrmgr_kek.key);
+
+        /// Generate folder_usrmgr rsa keys
+        const folder_usrmgr_rsa = await Common.Keys.CreateWrappedRSA(folder_usrmgr_kek.key);
+
+        /// Generate folder_usrmgr ecdh keys
+        const folder_usrmgr_ecdh = await Common.Keys.CreateWrappedECDH(folder_usrmgr_kek.key);
+
+        /// Generate folder_usrmgr ecdsa keys
+        const folder_usrmgr_ecdsa = await Common.Keys.CreateWrappedECDSA(folder_usrmgr_kek.key);
+
+        /// Folder keychain
+        const folder_usrmsgr_key = {
+            info : {
+                type : "folderKey",
+                version : 1,
+                timestamp : Date.now()
+            },
+            keys : {
+                cipher: {
+                    publicKey : {
+                        algorithm : {
+                            name : folder_usrmgr_rsa.key.publicKey.algorithm.name,
+                            modulusLength : folder_usrmgr_rsa.key.publicKey.algorithm.modulusLength,
+                            hash : folder_usrmgr_rsa.key.publicKey.algorithm.hash
+                        },
+                        usages : folder_usrmgr_rsa.key.publicKey.usages,
+                        value : folder_usrmgr_rsa.rsa_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : folder_usrmgr_rsa.key.publicKey.algorithm.name,
+                            modulusLength : folder_usrmgr_rsa.key.publicKey.algorithm.modulusLength,
+                            hash : folder_usrmgr_rsa.key.publicKey.algorithm.hash
+                        },
+                        usages : folder_usrmgr_rsa.key.privateKey.usages,
+                        value : folder_usrmgr_rsa.rsa_private_wrapped,
+                        iv : Buffer.from(folder_usrmgr_rsa.iv).toString("base64"),
+                        wrapper : `this.folderKey.kek`
+                    }
+                },
+
+                signing : {
+                    publicKey : {
+                        algorithm : {
+                            name : folder_usrmgr_ecdsa.key.publicKey.algorithm.name,
+                            namedCurve : folder_usrmgr_ecdsa.key.publicKey.algorithm.namedCurve
+                        },
+                        usages : folder_usrmgr_ecdsa.key.publicKey.usages,
+                        value : folder_usrmgr_ecdsa.ecdsa_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : folder_usrmgr_ecdsa.key.privateKey.algorithm.name,
+                            namedCurve : folder_usrmgr_ecdsa.key.privateKey.algorithm.namedCurve
+                        },
+                        usages : folder_usrmgr_ecdsa.key.privateKey.usages,
+                        value : folder_usrmgr_ecdsa.ecdsa_private_wrapped,
+                        iv : Buffer.from(folder_usrmgr_ecdsa.iv).toString("base64"),
+                        wrapper : `this.folderKey.kek`
+                    }
+                },
+
+                exchange : {
+                    publicKey : {
+                        algorithm : {
+                            name : folder_usrmgr_ecdh.key.publicKey.algorithm.name,
+                            namedCurve : folder_usrmgr_ecdh.key.publicKey.algorithm.namedCurve
+                        },
+                        usages : folder_usrmgr_ecdh.key.publicKey.usages,
+                        value : folder_usrmgr_ecdh.ecdh_public
+                    },
+                    privateKey : {
+                        algorithm : {
+                            name : folder_usrmgr_ecdh.key.privateKey.algorithm.name,
+                            namedCurve : folder_usrmgr_ecdh.key.privateKey.algorithm.namedCurve
+                        },
+                        usages : folder_usrmgr_ecdh.key.privateKey.usages,
+                        value : folder_usrmgr_ecdh.ecdh_private_wrapped,
+                        iv : Buffer.from(folder_usrmgr_ecdh.iv).toString("base64"),
+                        wrapper : `this.folderKey.kek`
+                    }
+
+                },
+
+                secret : {
+                    value : folder_usrmgr_secret.wrapped,
+                    iv : Buffer.from(folder_usrmgr_secret.iv).toString("base64"),
+                    wrapper : `this.folderKey.kek`
+                },
+
+                kek : {
+                    value : folder_usrmgr_kek.wrapped,
+                    iv : Buffer.from(folder_usrmgr_kek.iv).toString("base64"),
+                    wrapper : `${ this.APP_ID_ROOT }.userKey.cipher.public`
+                }
+            }
+        }
+
+        /**
+         * USER MANAGER FILES
+         */
+        /// Generate file key key encryption key
+        const authorizer_kek = await Common.Keys.CreateFileWrappingKey(folder_usrmsgr_key.keys.cipher.publicKey);
+
+
+        /// Generate file for system authorizer key
+        const authorizer = await crypto.subtle.generateKey(
+            {
+                name: 'ECDSA',
+                namedCurve: 'P-256'
+            },
+            true, // extractable
+            ['sign', 'verify']
+        );
+
+        /// Sign role using system authorizer key
+        const signature = Buffer.from(await crypto.subtle.sign(
+            {
+                name: 'ECDSA',
+                hash: { name: 'SHA-256' }
+            },
+            authorizer.privateKey,
+            Buffer.from(JSON.stringify(user_key.properties.payload), 'utf-8')
+        )).toString("base64")
+
+        /// Inject signature to user key
+        user_key.properties.signature = signature;
+            
+        /// Export device ecdh public key into base64 format
+        const authorizer_public = Buffer.from(await crypto.subtle.exportKey("raw", authorizer.publicKey)).toString("base64");
+
+        /// Wrap authorizer private key
+        const authorizer_private_wrapped = Buffer.from(await crypto.subtle.encrypt(
+            { name : "AES-GCM", iv: authorizer_kek.iv },
+            authorizer_kek.key,   
+            await crypto.subtle.exportKey("pkcs8", authorizer.privateKey)
+        )).toString("base64");
+
+        console.log(authorizer_public);
+        console.log(authorizer_private_wrapped);
+
+        return { user_key, recovery_key }
     }
 }

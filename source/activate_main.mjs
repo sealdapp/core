@@ -22,6 +22,7 @@ const crypto = new Crypto(schema, logger, validate);
 const platform = new Platform(schema, logger, validate);
 
 /// Declaration of plugins
+let auth;
 let storage = {};
 
 await (async function init(){
@@ -42,6 +43,12 @@ await (async function init(){
     
     /// Initialize key storage plugin instance
     await middleware.Initializer.initialize(await storage.private.init(process.env.STORAGE_BUCKET_PRIVATE));
+
+    /// Authentication library
+    auth = new plugins.Authenticator(schema, logger, validate);
+
+    /// Initialize authenticator plugin
+    await middleware.Initializer.initialize(await auth.init());
 
     logger.info(`Application successfully initialized.`)
 
@@ -80,9 +87,110 @@ async function prepareUpload(keyObject) {
     }
 }
 
-export const handler = async(event) => {
+async function uploadKeys(keys){
+        
+    /// Validate master key
+    const wrapped_master = await prepareUpload(keys.master_key);
 
-    return await middleware.Handler.main(event, async function({ token, body }){
+    /// Ensure wrapped_master file is valid
+    if(wrapped_master.success != true) throw wrapped_master.error;
+
+    /// Validate recovery key
+    const wrapped_recovery = await prepareUpload(keys.recovery_key);
+
+    /// Ensure wrapped_recovery file is valid
+    if(wrapped_recovery.success != true) throw wrapped_recovery.error;
+
+    /// Validate root user key
+    const root_key = await prepareUpload(keys.root_key);
+
+    /// Ensure root user key file is valid
+    if(root_key.success != true) throw root_key.error;
+
+    logger.info("All keys supplied are valid. Proceeding with the upload.");
+
+    /// Store root user key
+    const root_key_upload = await storage.private.putObject(`system/users/registered/${ process.env.AUTH_TYPE }/${ keys.root_key.metadata.issuer }/user-key.json`, root_key.data.content);
+
+    /// Ensure root user key upload is successful
+    if(root_key_upload.success != true) throw root_key_upload.error;
+
+    /// Store master key
+    const wrapped_master_upload = await storage.private.putObject(`system/keys/master-key.json`, wrapped_master.data.content);
+
+    /// Ensure wrapped_recovery_upload is successful
+    if(wrapped_master_upload.success != true) throw wrapped_master_upload.error;
+
+    /// Store recovery key 
+    const wrapped_recovery_upload = await storage.private.putObject(
+        `system/keys/recovery-key.json`, 
+        wrapped_recovery.data.content,
+        {
+            ObjectLockMode: "GOVERNANCE",
+            ObjectLockRetainUntilDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * process.env.KEYS_LOCK_DURATION),
+            ChecksumSHA256: wrapped_recovery.data.digest,
+            ChecksumAlgorithm: "SHA256"
+        }
+    );
+
+    /// Ensure wrapped_recovery_upload is successful
+    if(wrapped_recovery_upload.success != true) throw wrapped_recovery_upload.error;
+
+    logger.info(`Keys successfully initialized!`)
+}
+
+export const handler = async(event) => {
+        
+    try {
+
+        /// Ensure event have request body
+        if(validate.Property.isExistsKey(event, "body").result != true) return new schema.Response.Activate.Main({
+            statusCode : 400,
+            body : {
+                message : "Bad request"
+            }
+        })
+        /// Pass event body to authenticator signin method
+        const signed_in = await auth.signin(event.body);
+
+        /// Handle exceptions
+        if(signed_in.success != true) return new schema.Response.Activate.Main({
+            statusCode : 400,
+            body : {
+                message : signed_in.error.message
+            }
+        });
+        
+        /// Handle invalid authentications
+        if(signed_in.authenticated != true) return new schema.Response.Activate.Main({
+            statusCode : 401,
+            body : {
+                retry: signed_in.retry,
+                message : "Failed to authenticate user."
+            }
+        })
+
+        /// Upload user key
+
+        /// Upload recovery key
+
+        return new schema.Response.Activate.Main({
+            statusCode : 200
+        })
+    }
+    catch(e) {
+        
+        logger.error(`Something went wrong. ${ e.stack }`)
+        
+        return new schema.Response.Activate.Main({ 
+            body : {
+                message : e.message 
+            }
+        });
+    }
+
+
+    /*return await middleware.Handler.main(event, async function({ token, body }){
 
         logger.info(`Setting up keys.`);
 
@@ -129,59 +237,13 @@ export const handler = async(event) => {
         })
 
         logger.info("There is no recovery key detected. Proceeding with key initialization setup");
+
+        /// Uploads all keys to storage
+        await uploadKeys(keys)
         
-        /// Validate master key
-        const wrapped_master = await prepareUpload(keys.master_key);
-
-        /// Ensure wrapped_master file is valid
-        if(wrapped_master.success != true) throw wrapped_master.error;
-
-        /// Validate recovery key
-        const wrapped_recovery = await prepareUpload(keys.recovery_key);
-
-        /// Ensure wrapped_recovery file is valid
-        if(wrapped_recovery.success != true) throw wrapped_recovery.error;
-
-        /// Validate root user key
-        const root_key = await prepareUpload(keys.root_key);
-
-        /// Ensure root user key file is valid
-        if(root_key.success != true) throw root_key.error;
-
-        logger.info("All keys supplied are valid. Proceeding with the upload.");
-
-        /// Store root user key
-        const root_key_upload = await storage.private.putObject(`system/users/registered/root/user-key.json`, root_key.data.content);
-
-        /// Ensure root user key upload is successful
-        if(root_key_upload.success != true) throw root_key_upload.error;
-
-        /// Store master key
-        const wrapped_master_upload = await storage.private.putObject(`system/keys/master-key.json`, wrapped_master.data.content);
-
-        /// Ensure wrapped_recovery_upload is successful
-        if(wrapped_master_upload.success != true) throw wrapped_master_upload.error;
-
-        /// Store recovery key 
-        const wrapped_recovery_upload = await storage.private.putObject(
-            `system/keys/recovery-key.json`, 
-            wrapped_recovery.data.content,
-            {
-                ObjectLockMode: "GOVERNANCE",
-                ObjectLockRetainUntilDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * process.env.KEYS_LOCK_DURATION),
-                ChecksumSHA256: wrapped_recovery.data.digest,
-                ChecksumAlgorithm: "SHA256"
-            }
-        );
-
-        /// Ensure wrapped_recovery_upload is successful
-        if(wrapped_recovery_upload.success != true) throw wrapped_recovery_upload.error;
-
-        logger.info(`Keys successfully initialized!`)
-
         return new schema.Response.Keys.Init({ 
             statusCode : 200
         })
 
-    })
+    })*/
 }

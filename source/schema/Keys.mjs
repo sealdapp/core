@@ -19,13 +19,14 @@ export default class Keys {
 
     static Recovery = class {
 
-        constructor({ info, metadata, keys }){
+        constructor({ info, metadata, ciphers, keys }){
 
             this.keys = {};
 
             this.info = new Templates.Info(info);
             this.metadata = new Templates.Metadata(metadata);
-            this.keys.aes = new Templates.Keys.AES(keys.aes);
+            this.keys.master = new Templates.Keys.AES(keys.master);
+            this.keys.secret = new Templates.Keys.AES(keys.secret);
             this.keys.pbkdf2 = new Templates.Keys.PBKDF2(keys.pbkdf2);
         }
     }
@@ -38,11 +39,11 @@ export default class Keys {
 
             this.info = new Templates.Info(info);
             this.metadata = new Templates.Metadata(metadata);
-            this.keys.aes = new Templates.Keys.AES(keys.aes);
-            this.keys.pbkdf2 = new Templates.Keys.PBKDF2(keys.pbkdf2);
             this.keys.rsa = new Templates.Keys.RSA(keys.rsa);
             this.keys.ecdh = new Templates.Keys.ECDH(keys.ecdh);
             this.keys.ecdsa = new Templates.Keys.ECDSA(keys.ecdsa);
+            this.keys.secret = new Templates.Keys.AES(keys.secret);
+            this.keys.pbkdf2 = new Templates.Keys.PBKDF2(keys.pbkdf2);
         }
     }
 
@@ -54,7 +55,10 @@ export default class Keys {
             
             this.info = new Templates.Info(info);
             this.metadata = new Templates.Metadata(metadata);
-            this.keys.aes = new Templates.Keys.AES(keys.aes);
+            this.keys.secret = new Templates.Keys.AES(keys.secret);
+            
+            this.keys.folder = new Templates.Keys.RSA(keys.data);
+            this.keys.auth = new Templates.Keys.ECDSA(keys.auth);
         }
     }
 

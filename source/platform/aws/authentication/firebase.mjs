@@ -139,11 +139,14 @@ export default class Authenticator extends Authenticators {
 
             logger.debug(`User [${ payload.email }] successfullly authenticated!`);
 
+            /// Hash user id for consistency
+            const user_id = Buffer.from(await crypto.subtle.digest("SHA-256", Buffer.from(payload.user_id, "utf-8"))).toString("hex");
+
             return new schema.Authentication.SignIn({
                 success : true,
                 authenticated : true,
                 username : payload.email,
-                userid : payload.user_id
+                userid : user_id
             })
 
         }

@@ -203,15 +203,14 @@ describe("auth_verify", async function() {
             /// Decrease session timeout configuration
             process.env.APP_JWT_TOKEN_EXPIRY = "0s"
             
-            let APP_TOKEN_USER = await setup.getSessionToken((await setup.getTokens()).auth.user);
+            const { token } = await setup.getSessionToken((await setup.getTokens()).auth.user);
 
             let verified = await auth_verify({
-                cookies : [ `sessionToken=${ APP_TOKEN_USER };` ]
+                cookies : [ `sessionToken=${ token };` ]
             })
 
             expect(verified.isAuthorized).to.equal(false)
             expect(verified.context.message).to.equal("Session token expired.");
-
             /// Rever to original settings
             await setup.resetEnv();
         })
@@ -221,13 +220,13 @@ describe("auth_verify", async function() {
             /// Decrease session timeout configuration
             process.env.APP_JWT_ISSUER = "wrong-issuer"
             
-            let APP_TOKEN_USER = await setup.getSessionToken((await setup.getTokens()).auth.user);;
+            const { token } = await setup.getSessionToken((await setup.getTokens()).auth.user);;
 
             /// Revert to original settings
             await setup.resetEnv();
 
             let verified = await auth_verify({
-                cookies : [ `sessionToken=${ APP_TOKEN_USER };` ]
+                cookies : [ `sessionToken=${ token };` ]
             })
 
             expect(verified.isAuthorized).to.equal(false)

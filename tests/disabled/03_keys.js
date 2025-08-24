@@ -7,7 +7,7 @@ import Setup from "../lib/setup.mjs";
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /// Import application module to test
-import { handler as keys_init } from "../../source/keys_init.mjs";
+import { handler as activate_main } from "../../source/activate_main.mjs";
 import { handler as keys_get_user } from "../../source/keys_get_user.mjs";
 import { handler as keys_get_master } from "../../source/keys_get_master.mjs";
 import { handler as keys_get_recovery } from "../../source/keys_get_recovery.mjs";
@@ -30,6 +30,15 @@ async function resetKeys() {
     /// Override KEY_LOCK_RETENTION to 0.1 seconds
     process.env.KEYS_LOCK_DURATION = 0.000001;
 
+    /// Generate keys
+    try {
+        keys = await setup.getSampleKeys();
+    }
+    catch(e) {
+        console.log(`Failed to get sample keys. ${ e.stack }`)
+    }
+
+    console.log(keys.root_key)
     /// Delete master key
     await storage.send(new DeleteObjectCommand({
         Bucket : process.env.STORAGE_BUCKET_PRIVATE,
@@ -48,26 +57,18 @@ async function resetKeys() {
         Key : `system/users/registered/root/user-key.json`
     }));
 
-    /// Generate keys
-    try {
-        keys = await setup.getSampleKeys();
-    }
-    catch(e) {
-        console.log(`Failed to get sample keys. ${ e.stack }`)
-    }
-
 }
 
 /// Initialize setup
 before(async function() { await setup.init(); })
 
-describe("keys_init", async function() {
+describe.only("keys_init", async function() {
 
     describe(sectionTitle.success, async function() {
 
         before(resetKeys)
 
-        it("Should be able to initialize keys.", async function(){
+        it.only("Should be able to initialize keys.", async function(){
 
             let response = await keys_init({
                 cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
@@ -758,7 +759,7 @@ describe("keys_recover", async function() {
     
 })
 
-describe.only("keys_builtin", async function() {
+describe("keys_builtin", async function() {
 
     describe(sectionTitle.success, async function() {
 

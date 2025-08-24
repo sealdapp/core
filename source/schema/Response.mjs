@@ -41,15 +41,17 @@ export default class Response {
         }
     }
 
-    static Keys = class {
+    static Activate = class {
 
-        static Init = class extends Response.Base {
-
+        static Main = class extends Response.Base {
             constructor({ }) {
                 super({ ...arguments[0] });
 
             }
         }
+    }
+
+    static Keys = class {
 
         static Recover = class extends Response.Base {
 
@@ -91,6 +93,13 @@ export default class Response {
     }
 
     static Folders = class {
+
+        static Activate = class extends Response.Base {
+
+            constructor({ id = "" }) {
+                super({ ...arguments[0] });
+            }
+        }
 
         static Create = class extends Response.Base {
 

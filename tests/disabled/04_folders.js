@@ -6,9 +6,10 @@ import Setup from "../lib/setup.mjs";
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /// Import application module to test
-import { handler as keys_init } from "../../source/keys_init.mjs";
+import { handler as keys_init } from "../../source/activate_main.mjs";
 import { handler as keys_builtin } from "../../source/keys_builtin.mjs";
 import { handler as folders_create } from "../../source/folders_create.mjs";
+import { handler as folders_activate } from "../../source/folders_activate.mjs";
 
 const setup = new Setup();
 
@@ -124,7 +125,7 @@ async function createFolder(){
                 timestamp : Date.now()
             },
             keys : {
-                aes : {
+                secret : {
                     value : folder_master_wrapped,
                     iv : Buffer.from(folder_iv).toString("base64"),
                     wrapper : "masterKey.rsa.public"
@@ -141,7 +142,7 @@ async function createFolder(){
                     timestamp : Date.now()
                 },
                 keys : {
-                    aes : {
+                    secret : {
                         value : folder_root_wrapped,
                         iv : Buffer.from(folder_iv).toString("base64"),
                         wrapper : "root.userKey.rsa.public"
@@ -164,6 +165,42 @@ before(async function() {
     })
 })
 
+describe("folders_activate", async function(){
+
+    before(async function(){
+
+        /// Get folder builtin keys
+        const response = await keys_builtin({
+            cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+            body : { 
+                type : "gallery"
+            }
+        })
+
+        expect(response.statusCode).to.equals(200);
+
+        builtin_keys = JSON.parse(response.body)
+    })
+
+    describe(sectionTitle.success, async function() {
+
+        it.only("Should be able to activate vault gallery", async function(){
+
+            const { id, properties, folderKey, authorized_keys } = await createFolder();
+
+            const response = await folders_activate({
+                cookies : [ `sessionToken=${ (await setup.getTokens()).app.root };` ],
+                body : { 
+                    type : "gallery",
+                    id,
+                    properties, 
+                    folderKey,
+                    authorized_keys
+                }
+            })
+        })
+    })
+})
 
 
 describe("folders_create", async function() {
@@ -185,7 +222,7 @@ describe("folders_create", async function() {
 
     describe(sectionTitle.success, async function() {
 
-        it.only("Should be able to create folder", async function(){
+        it("Should be able to create folder", async function(){
 
             const { id, properties, folderKey, authorized_keys } = await createFolder();
 
